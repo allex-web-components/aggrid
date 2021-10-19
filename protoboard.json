@@ -1,0 +1,29 @@
+{
+  "browserify": {
+    "dist/browserified.js": "./index.js"
+  },
+  "js": {},
+  "css": {},
+  "dependencies": {
+    "js": [
+      "allex:environment:lib",
+      "allex:app:lib",
+      "allex:jqueryelements:lib"
+    ],
+    "css": [
+    ]
+  },
+	"additionaltargets": {
+    "js": [
+      ["dist", "ag-grid-community.min.js"],
+      ["dist", "ag-charts-community.min.js"]
+    ],
+    "css": [
+      ["dist", "ag-theme-balham.min.css"]
+    ]
+  },
+  "protoboard": {
+    "role": "webcomponent",
+    "js_doc_filters": "^(src)"
+  }
+}
