@@ -29,7 +29,9 @@ function createFullWidthRowManagerBase (execlib, applib, outerlib, mylib) {
       masterrowdata,
       {
         allexAgFullWidthRowInfo: {
-          orig_data: masterrowdata
+          orig_data: masterrowdata,
+          instance: null,
+          handler: null
         }
       }
     );

@@ -107,8 +107,8 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     this.gridconf.columnDefs[0].expandWaiter = this.expandRow.bind(this);
   };
   
-  MasterDetailManager.prototype.expandRow = function (params) {
-    var index, newdata;
+  MasterDetailManager.prototype.expandRow = function (params, event) {
+    var index, newdata, clicked;
     if (!this.gridEl) {
       return;
     }
@@ -116,8 +116,36 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     if (index<0) {
       return;
     }
+    clicked = event ? event.currentTarget : null;
+    if (params.data.allexAgFullWidthRowExpanded) {
+      if (clicked) {
+        clicked.classList.remove('ag-icon-tree-open');
+        clicked.classList.add('ag-icon-tree-closed');
+      }
+      console.log('gotta collapse');
+      newdata = this.gridEl.data[index+1];
+      if (newdata.allexAgFullWidthRowInfo) {
+        console.log('pajsad');
+        if (newdata.allexAgFullWidthRowInfo.handler) {
+          newdata.allexAgFullWidthRowInfo.handler.destroy();
+        }
+        this.gridEl.data.splice(index+1, 1);
+        this.gridEl.doApi('applyTransaction', {
+          remove: [newdata]
+        });
+        newdata.allexAgFullWidthRowInfo.handler = null;
+        newdata.allexAgFullWidthRowInfo.orig_data = null;
+        newdata.allexAgFullWidthRowInfo.instance = null;
+      }
+      return;
+    }
+    if (clicked) {
+      clicked.classList.remove('ag-icon-tree-closed');
+      clicked.classList.add('ag-icon-tree-open');
+    }
     newdata = this.fullWidthRowData(params.data);
-    this.gridEl.data.splice(index, 0, newdata);
+    params.data.allexAgFullWidthRowExpanded = true;
+    this.gridEl.data.splice(index+1, 0, newdata);
     this.gridEl.doApi('applyTransaction', {
       add: [newdata],
       addIndex: index+1

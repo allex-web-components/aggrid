@@ -45,6 +45,7 @@ function createDetailRowCreator (execlib, applib, outerlib, mylib) {
     }
     try {
       this.destroyable.gridEl.addChild(el);
+      this.params.data.allexAgFullWidthRowInfo.handler = el;
       el.set('agparams', this.params);
     }  catch (e) {
       console.error(e);
