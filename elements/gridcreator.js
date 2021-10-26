@@ -2,6 +2,7 @@ function createGrid (execlib, applib, mylib) {
   'use strict';
   
   var lib = execlib.lib,
+    fullWidthRowLib = require('./fullwidthrowmanagers')(execlib, applib, mylib),
     WebElement = applib.getElementType('WebElement');
 
   function isColumnOk (obj) {
@@ -21,26 +22,10 @@ function createGrid (execlib, applib, mylib) {
     return lib.isString(obj.field);
   }
 
-  function checkOptions (options) {
-    var gridconf;
-    if (!options) {
-      throw new lib.Error('NO_OPTIONS', 'options must exist');
-    }
-    if (!options.aggrid) {
-      throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
-    }
-    gridconf = options.aggrid;
-    if (!lib.isArray(gridconf.columnDefs)) {
-      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
-    }
-    if (!gridconf.columnDefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
-    }
-    gridconf.rowData = gridconf.rowData || [];
-  }
 
   function AgGridElement (id, options) {
-    checkOptions(options);
+    this.fullWidthRowManagers = null;
+    this.checkOptions(options);
     WebElement.call(this, id, options);
     this.data = null;
     this.selections = new lib.Map();
@@ -62,10 +47,14 @@ function createGrid (execlib, applib, mylib) {
     }
     this.selections = null;
     this.data = null;
-    if (this.getConfigVal('aggrid') && isFunction(this.getConfigVal('aggrid').destroy)) {
+    if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
     WebElement.prototype.__cleanUp.call(this);
+    if (lib.isArray(this.fullWidthRowManagers)){
+      lib.arryDestroyAll(this.fullWidthRowManagers);
+    }
+    this.fullWidthRowManagers = null;
   };
   AgGridElement.prototype.doThejQueryCreation = function () {
     WebElement.prototype.doThejQueryCreation.call(this);
@@ -78,6 +67,9 @@ function createGrid (execlib, applib, mylib) {
   };
   AgGridElement.prototype.set_data = function (data) {
     this.data = data;
+    this.__children.traverse(function (chld) {
+      chld.destroy();
+    });
     this.doApi('setRowData', data);
     this.refresh();
   };
@@ -97,7 +89,6 @@ function createGrid (execlib, applib, mylib) {
   };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected';
-    console.log('onAnySelection', suffix);
     if (selected) {
       this.selections.replace(typename, evntdata.data);
     } else {
@@ -129,12 +120,76 @@ function createGrid (execlib, applib, mylib) {
     aggridopts.columnApi[fnname].apply(aggridopts.api, Array.prototype.slice.call(arguments, 1));
   };
 
-  function agDataer(record, index) {
-    if (!('recid' in record)) {
-      record.recid = index;
+  AgGridElement.prototype.setDetailRowProperty = function (obj) {
+    if (!(obj && obj.fetchObject && obj.destProperty && obj.srcProperty)) {
+      return;
     }
-    //set the ag styling, if any
-    return record;
+    var srcpropval = obj.fetchObject[obj.srcProperty];
+    var el = this.__children.traverseConditionally(function (chld) {
+      var prop = lib.readPropertyFromDotDelimitedString(chld, obj.rowDataProperty);
+      if (lib.isEqual(prop, srcpropval)) {
+        chld.set(obj.destProperty, obj.value);
+        return chld;
+      }
+    });
+    srcpropval = null;
+    obj = null;
+  };
+
+  AgGridElement.prototype.checkOptions = function (options) {
+    var gridconf;
+    if (!options) {
+      throw new lib.Error('NO_OPTIONS', 'options must exist');
+    }
+    if (!options.aggrid) {
+      throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
+    }
+    gridconf = options.aggrid;
+    if (!lib.isArray(gridconf.columnDefs)) {
+      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
+    }
+    if (!gridconf.columnDefs.every(isColumnOk)) {
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
+    }
+    gridconf.rowData = gridconf.rowData || [];
+    this.fullWidthRowManagers = fullWidthRowLib.createFullWidthRowManagers(this, options);
+    if (this.fullWidthRowManagers) {
+      gridconf.isFullWidthCell = this.isFullWidthCell.bind(this);
+      gridconf.fullWidthCellRenderer = this.fullWidthCellRenderer.bind(this);
+    }
+  };
+  AgGridElement.prototype.isFullWidthCell = function (rownode) {
+    var ret;
+    if (!lib.isArray(this.fullWidthRowManagers)) {
+      return false;
+    }
+    ret = this.fullWidthRowManagers.some(function (m) {return m.isFullWidthRow(rownode);});
+    rownode = null;
+    return ret;
+  };
+  AgGridElement.prototype.fullWidthCellRenderer = function (params) {
+    console.log('fullWidthCellRenderer?', params);
+    if (!(
+      params && 
+      params.data && 
+      params.data.allexAgFullWidthRowInfo &&
+      params.data.allexAgFullWidthRowInfo.instance))
+    {
+      return null;
+    }
+    return params.data.allexAgFullWidthRowInfo.instance.render(params);
+  };
+
+
+  AgGridElement.prototype.indexOfObjectInData = function (object) {
+    var arry = this.data, ret, tmp;
+    for (ret = 0; ret<arry.length; ret++) {
+      tmp = arry[ret];
+      if (lib.isEqual(tmp, object)) {
+        return ret;
+      }
+    }
+    return -1;
   }
 
   applib.registerElementType('AgGrid', AgGridElement);
