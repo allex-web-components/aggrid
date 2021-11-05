@@ -31,9 +31,19 @@ function createGrid (execlib, applib, mylib) {
     this.selections = new lib.Map();
     this.rowSelected = this.createBufferableHookCollection();
     this.rowUnselected = this.createBufferableHookCollection();
+    this.masterRowExpanding = this.createBufferableHookCollection();
+    this.masterRowCollapsing = this.createBufferableHookCollection();
   }
   lib.inherit(AgGridElement, WebElement);
   AgGridElement.prototype.__cleanUp = function () {
+    if (this.masterRowCollapsing) {
+      this.masterRowCollapsing.destroy();
+    }
+    this.masterRowCollapsing = null;
+    if (this.masterRowExpanding) {
+      this.masterRowExpanding.destroy();
+    }
+    this.masterRowExpanding = null;
     if (this.rowUnselected) {
       this.rowUnselected.destroy();
     }

@@ -16,9 +16,10 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     this.agparams = null;
     WebElement.prototype.__cleanUp.call(this);
   };
-  DetailRowElement.prototype.dataIdentification = function (datafield) {
-    return this.getConfigVal()
-  }
+  DetailRowElement.prototype.setRowHeightAtOnce = function (height) {
+    this.agparams.node.setRowHeight(height);
+    this.__parent.doApi('onRowHeightChanged');
+  };
 
 
   applib.registerElementType('DetailRow', DetailRowElement);
@@ -122,10 +123,8 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
         clicked.classList.remove('ag-icon-tree-open');
         clicked.classList.add('ag-icon-tree-closed');
       }
-      console.log('gotta collapse');
       newdata = this.gridEl.data[index+1];
       if (newdata.allexAgFullWidthRowInfo) {
-        console.log('pajsad');
         if (newdata.allexAgFullWidthRowInfo.handler) {
           newdata.allexAgFullWidthRowInfo.handler.destroy();
         }
@@ -137,6 +136,8 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
         newdata.allexAgFullWidthRowInfo.orig_data = null;
         newdata.allexAgFullWidthRowInfo.instance = null;
       }
+      params.data.allexAgFullWidthRowExpanded = false;
+      this.gridEl.masterRowCollapsing.fire(params.data);
       return;
     }
     if (clicked) {
@@ -150,6 +151,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
       add: [newdata],
       addIndex: index+1
     });
+    this.gridEl.masterRowExpanding.fire(params.data);
   };
   MasterDetailManager.prototype.render = function (params) {
     var gui = document.createElement('span'),
