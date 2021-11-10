@@ -19,7 +19,8 @@
       ["dist", "ag-charts-community.min.js"]
     ],
     "css": [
-      ["dist", "ag-theme-balham.min.css"]
+      ["dist", "ag-theme-balham.min.css"],
+      ["dist", "dynalegend.css"]
     ]
   },
   "protoboard": {

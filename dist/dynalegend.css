@@ -1,0 +1,21 @@
+.dynalegend > ul {
+  list-style-type: none;
+  padding-right: 0.5rem;
+}
+
+.dynalegend-color {
+  width: 1rem;
+  height: 1rem;
+}
+
+.dynalegend-item {
+  padding: .3rem 0;
+}
+
+.dynalegend-caption {
+  margin-left: .5rem;
+}
+
+.dynalegend-item.disabled {
+  opacity: 0.5;
+}

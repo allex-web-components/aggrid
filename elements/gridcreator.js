@@ -8,7 +8,7 @@ function createGrid (execlib, applib, mylib) {
   function isColumnOk (obj) {
     var fmter;
     if (!obj) return false;
-    if (lib.isArray(obj.children)) return true;
+    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
     if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
       if (!obj.valueFormatter.name) {
         throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but without "name"');
