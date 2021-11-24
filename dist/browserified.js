@@ -422,30 +422,80 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
 }
 module.exports = createMasterDetailManager;
 },{}],8:[function(require,module,exports){
+function addCellValueHandling (lib, AgGridElement) {
+  'use strict';
+
+  
+  AgGridElement.prototype.onCellValueChanged = function (params) {
+    var rec, fieldname, changed;
+    if (params.newValue === params.oldValue) {
+      return;
+    }
+    if (!this.dataOriginals) {
+      this.dataOriginals = new lib.Map();
+    }
+    //console.log('now what', params);
+    fieldname = params.colDef.field;
+    rec = this.dataOriginals.get(params.rowIndex);
+    if (!rec) {
+      rec = lib.extend({}, params.data);
+      rec[fieldname] = params.oldValue;
+      this.dataOriginals.add(params.rowIndex, rec);
+    }
+    changed = params.data[fieldname]!==rec[fieldname];
+    params.data['allexAgGrid_'+fieldname+'_changed'] = changed;
+    if (noChanged(params.data)) {
+      params.data = this.dataOriginals.remove(params.rowIndex);
+    }
+    params.api.refreshCells();
+    this.set('editedCellCount', this.get('editedCellCount') + (changed ? 1 : -1));
+  };
+
+  AgGridElement.prototype.purgeDataOriginals = function () {
+    if (this.dataOriginals) {
+      this.dataOriginals.destroy();
+    }
+    this.dataOriginals = null;
+  };
+
+  AgGridElement.prototype.revertAllEdits = function () {
+    var data;
+    if (!this.dataOriginals) {
+      return;
+    }
+    data = this.get('data').slice();
+    this.dataOriginals.traverse(function (val, recindex) {
+      data[recindex] = val;
+    });
+    this.purgeDataOriginals();
+    this.set('data', data);
+    this.set('editedCellCount', 0);
+    data = null;
+  };
+
+  function noChanged (record) {
+    return !lib.traverseShallowConditionally(record, changedDetector);
+  }
+  function changedDetector (val, name) {
+    if (name.substr(0, 12) != 'allexAgGrid_') {
+      return;
+    }
+    if (name.substr(-8) != '_changed') {
+      return;
+    }
+    if (val) {
+      return true;
+    }
+  }
+}
+module.exports = addCellValueHandling;
+},{}],9:[function(require,module,exports){
 function createGrid (execlib, applib, mylib) {
   'use strict';
   
   var lib = execlib.lib,
     fullWidthRowLib = require('./fullwidthrowmanagers')(execlib, applib, mylib),
     WebElement = applib.getElementType('WebElement');
-
-  function isColumnOk (obj) {
-    var fmter;
-    if (!obj) return false;
-    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
-    if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
-      if (!obj.valueFormatter.name) {
-        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but without "name"');
-      }
-      fmter = mylib.formatters[obj.valueFormatter.name];
-      if (!fmter) {
-        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but "name" '+obj.valueFormatter.name+' does not map to a registered Formatter name');
-      }
-      obj.valueFormatter = fmter.bind(null, obj.valueFormatter);
-    }
-    return lib.isString(obj.field);
-  }
-
 
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
@@ -457,9 +507,21 @@ function createGrid (execlib, applib, mylib) {
     this.rowUnselected = this.createBufferableHookCollection();
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
+    this.onCellValueChanger = this.onCellValueChanged.bind(this);
+
+    this.dataOriginals = null;
+    this.editedCellCount = 0;
   }
   lib.inherit(AgGridElement, WebElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.editedCellCount = null;
+    this.purgeDataOriginals();
+    if (this.onCellValueChanger) {
+      if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').api.removeEventListener)) {
+        this.getConfigVal('aggrid').api.removeEventListener('cellValueChanged', this.onCellValueChanger);
+      }
+    }
+    this.onCellValueChanger = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
     }
@@ -496,15 +558,20 @@ function createGrid (execlib, applib, mylib) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {
         onRowSelected: this.onAnySelection.bind(this, 'row')
       }));
+      this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
       this.set('data', this.getConfigVal('data'));
     }
   };
   AgGridElement.prototype.set_data = function (data) {
     this.data = data;
+    this.purgeDataOriginals();
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
     this.doApi('setRowData', data);
+    if (!lib.isArray(data)) {
+      this.doApi('showLoadingOverlay');
+    }
     this.refresh();
   };
   AgGridElement.prototype.get_pinnedBottom = function (datarecords) {
@@ -513,6 +580,23 @@ function createGrid (execlib, applib, mylib) {
   }
   AgGridElement.prototype.set_pinnedBottom = function (datarecords) {
     this.doApi('setPinnedBottomRowData', datarecords);
+  };
+  AgGridElement.prototype.get_columnDefs = function () {
+    var aggridopts = this.getConfigVal('aggrid');
+    if (!aggridopts) {
+      return null;
+    }
+    return aggridopts.columnDefs;
+  };
+  AgGridElement.prototype.set_columnDefs = function (coldefs) {
+    try {
+      this.checkColumnDefs(coldefs);
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+    this.doApi('setColumnDefs', coldefs);
+    return true;
   };
   AgGridElement.prototype.refresh = function () {
     this.doApi('refreshHeader');
@@ -579,17 +663,20 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
     }
     gridconf = options.aggrid;
-    if (!lib.isArray(gridconf.columnDefs)) {
-      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
-    }
-    if (!gridconf.columnDefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
-    }
+    this.checkColumnDefs(gridconf.columnDefs);
     gridconf.rowData = gridconf.rowData || [];
     this.fullWidthRowManagers = fullWidthRowLib.createFullWidthRowManagers(this, options);
     if (this.fullWidthRowManagers) {
       gridconf.isFullWidthCell = this.isFullWidthCell.bind(this);
       gridconf.fullWidthCellRenderer = this.fullWidthCellRenderer.bind(this);
+    }
+  };
+  AgGridElement.prototype.checkColumnDefs = function (columndefs) {
+    if (!lib.isArray(columndefs)) {
+      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
+    }
+    if (!columndefs.every(isColumnOk)) {
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -602,7 +689,7 @@ function createGrid (execlib, applib, mylib) {
     return ret;
   };
   AgGridElement.prototype.fullWidthCellRenderer = function (params) {
-    console.log('fullWidthCellRenderer?', params);
+    //console.log('fullWidthCellRenderer?', params);
     if (!(
       params && 
       params.data && 
@@ -614,7 +701,6 @@ function createGrid (execlib, applib, mylib) {
     return params.data.allexAgFullWidthRowInfo.instance.render(params);
   };
 
-
   AgGridElement.prototype.indexOfObjectInData = function (object) {
     var arry = this.data, ret, tmp;
     for (ret = 0; ret<arry.length; ret++) {
@@ -624,13 +710,39 @@ function createGrid (execlib, applib, mylib) {
       }
     }
     return -1;
+  };
+
+
+  function isColumnOk (obj) {
+    var name, params, fmter, prser;
+    if (!obj) return false;
+    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
+    if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
+      name = obj.valueFormatter.name;
+      if (!name) {
+        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but without "name"');
+      }
+      params = obj.valueFormatter;
+      fmter = mylib.formatters[name];
+      if (!fmter) {
+        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but "name" '+obj.valueFormatter.name+' does not map to a registered Formatter name');
+      }
+      obj.valueFormatter = fmter.bind(null, params);
+      prser = mylib.parsers[name];
+      if (prser) {
+        obj.valueParser = prser.bind(null, params);
+      }
+    }
+    return lib.isString(obj.field);
   }
+
+  require('./gridcellvaluehandlingcreator')(lib, AgGridElement);
 
   applib.registerElementType('AgGrid', AgGridElement);
 }
 module.exports = createGrid;
 
-},{"./fullwidthrowmanagers":3}],9:[function(require,module,exports){
+},{"./fullwidthrowmanagers":3,"./gridcellvaluehandlingcreator":8}],10:[function(require,module,exports){
 function createElements (execlib, mylib) {
   'use strict';
 
@@ -642,7 +754,7 @@ function createElements (execlib, mylib) {
 }
 module.exports = createElements;
 
-},{"./chartcreator":1,"./gridcreator":8}],10:[function(require,module,exports){
+},{"./chartcreator":1,"./gridcreator":9}],11:[function(require,module,exports){
 function createFormatters (execlib, outerlib) {
   'use strict';
 
@@ -657,7 +769,7 @@ function createFormatters (execlib, outerlib) {
 }
 module.exports = createFormatters;
 
-},{"./numbercreator":11}],11:[function(require,module,exports){
+},{"./numbercreator":12}],12:[function(require,module,exports){
 function createNumberFormatters (execlib, mylib) {
   'use strict';
 
@@ -695,7 +807,7 @@ function createNumberFormatters (execlib, mylib) {
       val = numberToString(val, options.decimals);
     }
     if (lib.isString(options.separator)) {
-      val = val.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      val = val.replace(/\B(?=(\d{3})+(?!\d))/g, options.separator);
     }
     if (lib.isString(options.prefix)) {
       val = options.prefix+val;
@@ -710,16 +822,84 @@ function createNumberFormatters (execlib, mylib) {
 }
 module.exports = createNumberFormatters;
 
-},{}],12:[function(require,module,exports){
+},{}],13:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
   var mylib = {};
 
   require('./formatters')(execlib, mylib);
+  require('./parsers')(execlib, mylib);
   require('./elements')(execlib, mylib);
 
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./elements":9,"./formatters":10}]},{},[12]);
+},{"./elements":10,"./formatters":11,"./parsers":14}],14:[function(require,module,exports){
+function createParsers (execlib, outerlib) {
+  'use strict';
+
+  var mylib = {};
+
+  outerlib.registerParser = function (parsername, parserfunc) {
+    mylib[parsername] = parserfunc;
+  };
+
+  require('./numbercreator')(execlib, mylib);
+  outerlib.parsers = mylib;
+}
+module.exports = createParsers;
+
+},{"./numbercreator":15}],15:[function(require,module,exports){
+function createNumberParsers (execlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib;
+
+  function parseNumberPhase2 (options, num) {
+    if (!lib.isNumber(num)) {
+      if (!options.force){
+        return num;
+      }
+      num = 0;
+    }
+    options = options || {};
+    if (options.premultiplyby) {
+      num =  num/(options.premultiplyby); //premultiplyby is taken from formatter, so inverse here
+    }
+    return num;
+  }
+
+  function parseNumber (options, data) {
+    var val = data.newValue;
+    options = options || {};
+    if (lib.isNumber(val)) {
+      return parseNumberPhase2(options, val);
+    }
+    if (lib.isString(val)) {
+      if (options.prefix) {
+        val = val.replace(new RegExp('^'+options.prefix), '');
+      }
+      if (options.suffix) {
+        val = val.replace(new RegExp(options.suffix+'$'), '');
+      }
+      if (options.separator) {
+        val = val.replace(new RegExp(options.separator, 'g'), '');
+      }
+      val = parseFloat(val);
+      if (!lib.isNumber(val)) {
+        if (!options.force){
+          return data.oldValue;
+        }
+        val = 0;
+      }
+      return parseNumberPhase2(options, val);
+    }
+    return data.oldValue;
+  }
+
+  mylib.number = parseNumber;
+}
+module.exports = createNumberParsers;
+
+},{}]},{},[13]);

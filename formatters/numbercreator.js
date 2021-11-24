@@ -35,7 +35,7 @@ function createNumberFormatters (execlib, mylib) {
       val = numberToString(val, options.decimals);
     }
     if (lib.isString(options.separator)) {
-      val = val.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      val = val.replace(/\B(?=(\d{3})+(?!\d))/g, options.separator);
     }
     if (lib.isString(options.prefix)) {
       val = options.prefix+val;

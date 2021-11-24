@@ -5,24 +5,6 @@ function createGrid (execlib, applib, mylib) {
     fullWidthRowLib = require('./fullwidthrowmanagers')(execlib, applib, mylib),
     WebElement = applib.getElementType('WebElement');
 
-  function isColumnOk (obj) {
-    var fmter;
-    if (!obj) return false;
-    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
-    if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
-      if (!obj.valueFormatter.name) {
-        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but without "name"');
-      }
-      fmter = mylib.formatters[obj.valueFormatter.name];
-      if (!fmter) {
-        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but "name" '+obj.valueFormatter.name+' does not map to a registered Formatter name');
-      }
-      obj.valueFormatter = fmter.bind(null, obj.valueFormatter);
-    }
-    return lib.isString(obj.field);
-  }
-
-
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
     this.checkOptions(options);
@@ -33,9 +15,21 @@ function createGrid (execlib, applib, mylib) {
     this.rowUnselected = this.createBufferableHookCollection();
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
+    this.onCellValueChanger = this.onCellValueChanged.bind(this);
+
+    this.dataOriginals = null;
+    this.editedCellCount = 0;
   }
   lib.inherit(AgGridElement, WebElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.editedCellCount = null;
+    this.purgeDataOriginals();
+    if (this.onCellValueChanger) {
+      if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').api.removeEventListener)) {
+        this.getConfigVal('aggrid').api.removeEventListener('cellValueChanged', this.onCellValueChanger);
+      }
+    }
+    this.onCellValueChanger = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
     }
@@ -72,15 +66,20 @@ function createGrid (execlib, applib, mylib) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {
         onRowSelected: this.onAnySelection.bind(this, 'row')
       }));
+      this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
       this.set('data', this.getConfigVal('data'));
     }
   };
   AgGridElement.prototype.set_data = function (data) {
     this.data = data;
+    this.purgeDataOriginals();
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
     this.doApi('setRowData', data);
+    if (!lib.isArray(data)) {
+      this.doApi('showLoadingOverlay');
+    }
     this.refresh();
   };
   AgGridElement.prototype.get_pinnedBottom = function (datarecords) {
@@ -89,6 +88,23 @@ function createGrid (execlib, applib, mylib) {
   }
   AgGridElement.prototype.set_pinnedBottom = function (datarecords) {
     this.doApi('setPinnedBottomRowData', datarecords);
+  };
+  AgGridElement.prototype.get_columnDefs = function () {
+    var aggridopts = this.getConfigVal('aggrid');
+    if (!aggridopts) {
+      return null;
+    }
+    return aggridopts.columnDefs;
+  };
+  AgGridElement.prototype.set_columnDefs = function (coldefs) {
+    try {
+      this.checkColumnDefs(coldefs);
+    } catch (e) {
+      console.error(e);
+      return false;
+    }
+    this.doApi('setColumnDefs', coldefs);
+    return true;
   };
   AgGridElement.prototype.refresh = function () {
     this.doApi('refreshHeader');
@@ -155,17 +171,20 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
     }
     gridconf = options.aggrid;
-    if (!lib.isArray(gridconf.columnDefs)) {
-      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
-    }
-    if (!gridconf.columnDefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
-    }
+    this.checkColumnDefs(gridconf.columnDefs);
     gridconf.rowData = gridconf.rowData || [];
     this.fullWidthRowManagers = fullWidthRowLib.createFullWidthRowManagers(this, options);
     if (this.fullWidthRowManagers) {
       gridconf.isFullWidthCell = this.isFullWidthCell.bind(this);
       gridconf.fullWidthCellRenderer = this.fullWidthCellRenderer.bind(this);
+    }
+  };
+  AgGridElement.prototype.checkColumnDefs = function (columndefs) {
+    if (!lib.isArray(columndefs)) {
+      throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
+    }
+    if (!columndefs.every(isColumnOk)) {
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -178,7 +197,7 @@ function createGrid (execlib, applib, mylib) {
     return ret;
   };
   AgGridElement.prototype.fullWidthCellRenderer = function (params) {
-    console.log('fullWidthCellRenderer?', params);
+    //console.log('fullWidthCellRenderer?', params);
     if (!(
       params && 
       params.data && 
@@ -190,7 +209,6 @@ function createGrid (execlib, applib, mylib) {
     return params.data.allexAgFullWidthRowInfo.instance.render(params);
   };
 
-
   AgGridElement.prototype.indexOfObjectInData = function (object) {
     var arry = this.data, ret, tmp;
     for (ret = 0; ret<arry.length; ret++) {
@@ -200,7 +218,33 @@ function createGrid (execlib, applib, mylib) {
       }
     }
     return -1;
+  };
+
+
+  function isColumnOk (obj) {
+    var name, params, fmter, prser;
+    if (!obj) return false;
+    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
+    if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
+      name = obj.valueFormatter.name;
+      if (!name) {
+        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but without "name"');
+      }
+      params = obj.valueFormatter;
+      fmter = mylib.formatters[name];
+      if (!fmter) {
+        throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object has valueFormatter as Object but "name" '+obj.valueFormatter.name+' does not map to a registered Formatter name');
+      }
+      obj.valueFormatter = fmter.bind(null, params);
+      prser = mylib.parsers[name];
+      if (prser) {
+        obj.valueParser = prser.bind(null, params);
+      }
+    }
+    return lib.isString(obj.field);
   }
+
+  require('./gridcellvaluehandlingcreator')(lib, AgGridElement);
 
   applib.registerElementType('AgGrid', AgGridElement);
 }
