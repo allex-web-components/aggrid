@@ -20,7 +20,7 @@ function createNumberFormatters (execlib, mylib) {
   }
 
   function formatNumber (options, data) {
-    var val = data.value;
+    var val = data.value, vals;
     options = options || {};
     if (!lib.isNumber(val)) {
       if (!options.force) {
@@ -35,7 +35,9 @@ function createNumberFormatters (execlib, mylib) {
       val = numberToString(val, options.decimals);
     }
     if (lib.isString(options.separator)) {
-      val = val.replace(/\B(?=(\d{3})+(?!\d))/g, options.separator);
+      vals = val.split('.');
+      vals[0] = vals[0].replace(/\B(?=(\d{3})+(?!\d))/g, options.separator);
+      val = vals.join('.');
     }
     if (lib.isString(options.prefix)) {
       val = options.prefix+val;
