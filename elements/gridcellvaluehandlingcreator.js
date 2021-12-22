@@ -43,10 +43,17 @@ function addCellValueHandling (lib, AgGridElement) {
     this.dataOriginals.traverse(function (val, recindex) {
       data[recindex] = val;
     });
-    this.purgeDataOriginals();
+    //this.purgeDataOriginals();
     this.set('data', data);
+    this.purgeDataOriginals();
     this.set('editedCellCount', 0);
     data = null;
+  };
+  AgGridElement.prototype.dataCleanOfChangedKeys = function (data) {
+    if (!lib.isArray(data)) {
+      return data;
+    }
+    return data.map(changedCleaner);
   };
 
   function noChanged (record) {
@@ -62,6 +69,19 @@ function addCellValueHandling (lib, AgGridElement) {
     if (val) {
       return true;
     }
+  }
+  function changedCleaner (record) {
+    var ret = {}, prop;
+    for(prop in record) {
+      if (!record.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (changedDetector(true, prop)){
+        continue;
+      }
+      ret[prop] = record[prop];
+    }
+    return ret;
   }
 }
 module.exports = addCellValueHandling;

@@ -467,10 +467,17 @@ function addCellValueHandling (lib, AgGridElement) {
     this.dataOriginals.traverse(function (val, recindex) {
       data[recindex] = val;
     });
-    this.purgeDataOriginals();
+    //this.purgeDataOriginals();
     this.set('data', data);
+    this.purgeDataOriginals();
     this.set('editedCellCount', 0);
     data = null;
+  };
+  AgGridElement.prototype.dataCleanOfChangedKeys = function (data) {
+    if (!lib.isArray(data)) {
+      return data;
+    }
+    return data.map(changedCleaner);
   };
 
   function noChanged (record) {
@@ -486,6 +493,19 @@ function addCellValueHandling (lib, AgGridElement) {
     if (val) {
       return true;
     }
+  }
+  function changedCleaner (record) {
+    var ret = {}, prop;
+    for(prop in record) {
+      if (!record.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (changedDetector(true, prop)){
+        continue;
+      }
+      ret[prop] = record[prop];
+    }
+    return ret;
   }
 }
 module.exports = addCellValueHandling;
@@ -516,11 +536,13 @@ function createGrid (execlib, applib, mylib) {
   AgGridElement.prototype.__cleanUp = function () {
     this.editedCellCount = null;
     this.purgeDataOriginals();
+    /*
     if (this.onCellValueChanger) {
       if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').api.removeEventListener)) {
         this.getConfigVal('aggrid').api.removeEventListener('cellValueChanged', this.onCellValueChanger);
       }
     }
+    */
     this.onCellValueChanger = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -556,19 +578,21 @@ function createGrid (execlib, applib, mylib) {
     WebElement.prototype.doThejQueryCreation.call(this);
     if (this.$element && this.$element.length) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {
-        onRowSelected: this.onAnySelection.bind(this, 'row')
+        onRowSelected: this.onAnySelection.bind(this, 'row'),
+        onCellValueChanged: this.onCellValueChanger
       }));
-      this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
+      //this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
       this.set('data', this.getConfigVal('data'));
     }
   };
   AgGridElement.prototype.set_data = function (data) {
+    //data = this.dataCleanOfChangedKeys(data);
     this.data = data;
     this.purgeDataOriginals();
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
-    this.doApi('setRowData', data);
+    this.doApi('setRowData', data); 
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
     }

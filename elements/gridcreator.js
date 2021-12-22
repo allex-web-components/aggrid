@@ -24,11 +24,13 @@ function createGrid (execlib, applib, mylib) {
   AgGridElement.prototype.__cleanUp = function () {
     this.editedCellCount = null;
     this.purgeDataOriginals();
+    /*
     if (this.onCellValueChanger) {
       if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').api.removeEventListener)) {
         this.getConfigVal('aggrid').api.removeEventListener('cellValueChanged', this.onCellValueChanger);
       }
     }
+    */
     this.onCellValueChanger = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -64,19 +66,21 @@ function createGrid (execlib, applib, mylib) {
     WebElement.prototype.doThejQueryCreation.call(this);
     if (this.$element && this.$element.length) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {
-        onRowSelected: this.onAnySelection.bind(this, 'row')
+        onRowSelected: this.onAnySelection.bind(this, 'row'),
+        onCellValueChanged: this.onCellValueChanger
       }));
-      this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
+      //this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
       this.set('data', this.getConfigVal('data'));
     }
   };
   AgGridElement.prototype.set_data = function (data) {
+    //data = this.dataCleanOfChangedKeys(data);
     this.data = data;
     this.purgeDataOriginals();
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
-    this.doApi('setRowData', data);
+    this.doApi('setRowData', data); 
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
     }
