@@ -157,25 +157,47 @@ function createGrid (execlib, applib, mylib) {
     obj = null;
   };
 
-  AgGridElement.prototype.traverseRealColumnDefs = function (cb) {
-    this.traverseAnyForRealColumnDefs(this.get('columnDefs'), cb);
+  AgGridElement.prototype.forEachRealColumnDef = function (cb) {
+    this.forEachAnyForRealColumnDefs(this.get('columnDefs'), cb);
   };
-  AgGridElement.prototype.traverseAnyForRealColumnDefs = function (arry, cb) {
+  AgGridElement.prototype.forEachAnyForRealColumnDefs = function (arry, cb) {
     if (!lib.isArray(arry)) {
       return;
     };
-    arry.forEach(this.doColumnDefInTraverse.bind(this, cb));
+    arry.forEach(this.doColumnDefInForEach.bind(this, cb));
     cb = null;
   };
-  AgGridElement.prototype.doColumnDefInTraverse = function (cb, coldef) {
+  AgGridElement.prototype.doColumnDefInForEach = function (cb, coldef) {
     if (!coldef) {
       return;
     }
     if (lib.isArray(coldef.children)) {
-      this.traverseAnyForRealColumnDefs(coldef.children, cb);
+      this.forEachAnyForRealColumnDefs(coldef.children, cb);
       return;
     }
     cb (coldef);
+  };
+
+  AgGridElement.prototype.reduceRealColumnDefs = function (cb, initvalue) {
+    return this.reduceAnyForRealColumnDefs(this.get('columnDefs'), cb, initvalue);
+  };
+  AgGridElement.prototype.reduceAnyForRealColumnDefs = function (arry, cb, initvalue) {
+    var ret;
+    if (!lib.isArray(arry)) {
+      return initvalue;
+    };
+    ret = arry.reduce(this.doColumnDefInReduce.bind(this, cb), initvalue);
+    cb = null;
+    return ret;
+  };
+  AgGridElement.prototype.doColumnDefInReduce = function (cb, res, coldef) {
+    if (!coldef) {
+      return res;
+    }
+    if (lib.isArray(coldef.children)) {
+      return this.reduceAnyForRealColumnDefs(coldef.children, cb, res);
+    }
+    return cb (res, coldef);
   };
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {

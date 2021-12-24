@@ -90,7 +90,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   };
 
   EditableAgGridMixin.prototype.updateRow = function (index, record) {
-    var model = this.doApi('getModel'), rownode, prop, coldefs;
+    var model = this.doApi('getModel'), rownode, ret;
     if (!model) {
       return;
     }
@@ -98,33 +98,52 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!rownode) {
       return;
     }
-    this.traverseRealColumnDefs(this.setDataValueRowNodeRecColDef.bind(this, rownode, record));
+    //this.forEachRealColumnDef(this.setDataValueRowNodeRecColDef.bind(this, rownode, record));
+    ret = this.reduceRealColumnDefs(this.setDataValueRowNodeRecColDef.bind(this, rownode, record), null);
     rownode = null;
     record = null;
+    return ret;
     //for (prop in record) {
     //  rownode.setDataValue(prop, record[prop]);
     //}
     //rownode.setData(record);
   };
 
-  EditableAgGridMixin.prototype.setDataValueRowNodeRecColDef = function (rownode, record, coldef) {
+  EditableAgGridMixin.prototype.updateConsecutiveRows = function (rows, startindex, endindex, step, offset) {
+    var i, ret;
+    if (step > 0) {
+      for (i = startindex; i <= endindex; i+=step) {
+        ret = this.updateRow(i, rows[i]);
+      }
+    }
+    if (step < 0) {
+      for (i = startindex; i >= endindex; i+=step) {
+        ret = this.updateRow(i, rows[i]);
+      }
+    }
+    return ret;
+  };
+
+  EditableAgGridMixin.prototype.setDataValueRowNodeRecColDef = function (rownode, record, res, coldef) {
     if (!(coldef.field in record)) {
-      return;
+      return res;
     }
     /*
     console.log('setting val for', coldef.field);
     rownode.setDataValue(coldef.field, record[coldef.field]);
     */
-    this.jobs.run('.', new outerlib.jobs.CellUpdater(this, rownode, coldef.field, record[coldef.field]));
+    return this.jobs.run('.', new outerlib.jobs.CellUpdater(this, rownode, coldef.field, record[coldef.field]));
   }
 
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
       , 'onCellValueChanged'
       , 'purgeDataOriginals'
+      , 'revertAllEdits'
       , 'get_dataWOChangedKeys'
       , 'dataCleanOfChangedKeys'
       , 'updateRow'
+      , 'updateConsecutiveRows'
       , 'setDataValueRowNodeRecColDef'
     );
   }

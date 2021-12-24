@@ -27,11 +27,18 @@ function createCellUpdaterJob (execlib, mylib) {
     this.rownode = null;
     JobOnDestroyable.prototype.destroy.call(this);
     jobcount--;
-    console.log(jobcount, 'left');
+    //console.log(jobcount, 'left');
   };
   CellUpdaterJob.prototype.go = function () {
     var ok = this.okToGo();
     if (!ok.ok) {
+      return ok.val;
+    }
+    if (this.rownode &&
+      this.rownode.data &&
+      this.rownode.data[this.propname] === this.value
+    ) {
+      lib.runNext(this.resolve.bind(this, true));
       return ok.val;
     }
     this.rownode.setDataValue(this.propname, this.value);
