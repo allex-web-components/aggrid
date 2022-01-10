@@ -2,6 +2,7 @@
   'use strict';
 
   var mylib = {
+    utils: require('./utils')(execlib.lib),
     jobs: require('./jobs')(execlib),
     gridmixins: null
   };

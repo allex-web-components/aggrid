@@ -120,6 +120,14 @@ function createGrid (execlib, applib, mylib) {
     this[typename+suffix].fire(evntdata.data);
   };
 
+  AgGridElement.prototype.rowNodeForIndex = function (index) {
+    var model = this.doApi('getModel');
+    if (!model) {
+      return null;
+    }
+    return model.getRowNode(index);
+  };
+
   AgGridElement.prototype.doApi = function (fnname) {
     var aggridopts = this.getConfigVal('aggrid');
     if (!aggridopts) {
@@ -157,48 +165,18 @@ function createGrid (execlib, applib, mylib) {
     obj = null;
   };
 
+  AgGridElement.prototype.deepCopyColumnDefs = function () {
+    return mylib.utils.columnDef.deepCopy(this.get('columnDefs'));
+  };
+
   AgGridElement.prototype.forEachRealColumnDef = function (cb) {
-    this.forEachAnyForRealColumnDefs(this.get('columnDefs'), cb);
-  };
-  AgGridElement.prototype.forEachAnyForRealColumnDefs = function (arry, cb) {
-    if (!lib.isArray(arry)) {
-      return;
-    };
-    arry.forEach(this.doColumnDefInForEach.bind(this, cb));
-    cb = null;
-  };
-  AgGridElement.prototype.doColumnDefInForEach = function (cb, coldef) {
-    if (!coldef) {
-      return;
-    }
-    if (lib.isArray(coldef.children)) {
-      this.forEachAnyForRealColumnDefs(coldef.children, cb);
-      return;
-    }
-    cb (coldef);
+    mylib.utils.columnDef.forEachRealColumnDef(this.get('columnDefs'), cb);
   };
 
   AgGridElement.prototype.reduceRealColumnDefs = function (cb, initvalue) {
-    return this.reduceAnyForRealColumnDefs(this.get('columnDefs'), cb, initvalue);
+    return mylib.utils.columnDef.reduceRealColumnDefs(this.get('columnDefs'), cb, initvalue);
   };
-  AgGridElement.prototype.reduceAnyForRealColumnDefs = function (arry, cb, initvalue) {
-    var ret;
-    if (!lib.isArray(arry)) {
-      return initvalue;
-    };
-    ret = arry.reduce(this.doColumnDefInReduce.bind(this, cb), initvalue);
-    cb = null;
-    return ret;
-  };
-  AgGridElement.prototype.doColumnDefInReduce = function (cb, res, coldef) {
-    if (!coldef) {
-      return res;
-    }
-    if (lib.isArray(coldef.children)) {
-      return this.reduceAnyForRealColumnDefs(coldef.children, cb, res);
-    }
-    return cb (res, coldef);
-  };
+
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
     obj.onRowSelected = this.onAnySelection.bind(this, 'row');

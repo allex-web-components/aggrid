@@ -544,6 +544,14 @@ function createGrid (execlib, applib, mylib) {
     this[typename+suffix].fire(evntdata.data);
   };
 
+  AgGridElement.prototype.rowNodeForIndex = function (index) {
+    var model = this.doApi('getModel');
+    if (!model) {
+      return null;
+    }
+    return model.getRowNode(index);
+  };
+
   AgGridElement.prototype.doApi = function (fnname) {
     var aggridopts = this.getConfigVal('aggrid');
     if (!aggridopts) {
@@ -581,48 +589,18 @@ function createGrid (execlib, applib, mylib) {
     obj = null;
   };
 
+  AgGridElement.prototype.deepCopyColumnDefs = function () {
+    return mylib.utils.columnDef.deepCopy(this.get('columnDefs'));
+  };
+
   AgGridElement.prototype.forEachRealColumnDef = function (cb) {
-    this.forEachAnyForRealColumnDefs(this.get('columnDefs'), cb);
-  };
-  AgGridElement.prototype.forEachAnyForRealColumnDefs = function (arry, cb) {
-    if (!lib.isArray(arry)) {
-      return;
-    };
-    arry.forEach(this.doColumnDefInForEach.bind(this, cb));
-    cb = null;
-  };
-  AgGridElement.prototype.doColumnDefInForEach = function (cb, coldef) {
-    if (!coldef) {
-      return;
-    }
-    if (lib.isArray(coldef.children)) {
-      this.forEachAnyForRealColumnDefs(coldef.children, cb);
-      return;
-    }
-    cb (coldef);
+    mylib.utils.columnDef.forEachRealColumnDef(this.get('columnDefs'), cb);
   };
 
   AgGridElement.prototype.reduceRealColumnDefs = function (cb, initvalue) {
-    return this.reduceAnyForRealColumnDefs(this.get('columnDefs'), cb, initvalue);
+    return mylib.utils.columnDef.reduceRealColumnDefs(this.get('columnDefs'), cb, initvalue);
   };
-  AgGridElement.prototype.reduceAnyForRealColumnDefs = function (arry, cb, initvalue) {
-    var ret;
-    if (!lib.isArray(arry)) {
-      return initvalue;
-    };
-    ret = arry.reduce(this.doColumnDefInReduce.bind(this, cb), initvalue);
-    cb = null;
-    return ret;
-  };
-  AgGridElement.prototype.doColumnDefInReduce = function (cb, res, coldef) {
-    if (!coldef) {
-      return res;
-    }
-    if (lib.isArray(coldef.children)) {
-      return this.reduceAnyForRealColumnDefs(coldef.children, cb, res);
-    }
-    return cb (res, coldef);
-  };
+
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
     obj.onRowSelected = this.onAnySelection.bind(this, 'row');
@@ -831,13 +809,17 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   var lib = execlib.lib;
 
   var ChangedKeyPrefix = 'allexAgGrid_',
-    ChangedKeySuffix = '_changed';
+    ChangedKeySuffix = '_changed',
+    EditableEditedCountPropName = ChangedKeyPrefix+'editableEditedCount';
 
   function EditableAgGridMixin (options) {
     this.cellEdited = this.createBufferableHookCollection();
     this.onCellValueChanger = this.onCellValueChanged.bind(this);
     this.dataOriginals = null;
     this.editedCellCount = 0;
+    this.editableEditedCellCount = 0;
+    this.editedRowsCount = 0;
+    this.inBatchEdit = false;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -850,6 +832,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       }
     }
     */
+    this.inBatchEdit = null;
+    this.editedRowsCount = null;
+    this.editableEditedCellCount = null;
     this.editedCellCount = null;
     this.onCellValueChanger = null;
     if (this.cellEdited) {
@@ -859,7 +844,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   };
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
-    var rec, fieldname, changed;
+    var rec, fieldname, editableedited, changed, changeddelta;
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
       return;
@@ -867,23 +852,44 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       this.dataOriginals = new lib.Map();
     }
-    //console.log('now what', params);
     fieldname = params.colDef.field;
-    console.log('change on', fieldname);
+    editableedited = params.colDef && params.colDef.editable;
     rec = this.dataOriginals.get(params.rowIndex);
     if (!rec) {
-      rec = lib.extend({}, params.data);
+      rec = lib.extendShallow({}, params.data);
       rec[fieldname] = params.oldValue;
       this.dataOriginals.add(params.rowIndex, rec);
     }
     changed = params.data[fieldname]!==rec[fieldname];
+    changeddelta = changed ? 1 : -1;
+    if (!(EditableEditedCountPropName in params.data)) {
+      params.data[EditableEditedCountPropName] = 0;
+    }
+    if (editableedited) {
+      params.data[EditableEditedCountPropName] += changeddelta;
+    }
     params.data[ChangedKeyPrefix+fieldname+ChangedKeySuffix] = changed;
+    if (!ChangedKeyPrefix)
     if (noChanged(params.data)) {
       params.data = this.dataOriginals.remove(params.rowIndex);
     }
-    params.api.refreshCells();
+    if (!this.inBatchEdit) {
+        params.api.refreshCells();
+    }
     this.cellEdited.fire(params);
-    this.set('editedCellCount', this.get('editedCellCount') + (changed ? 1 : -1));
+    this.set('editedCellCount', this.get('editedCellCount') + changeddelta);
+    if (editableedited) {
+      this.set('editableEditedCellCount', this.get('editableEditedCellCount') + (changed ? 1 : -1));
+    }
+    this.set('editedRowsCount', this.dataOriginals.count);
+  };
+
+  EditableAgGridMixin.prototype.startBatchEdit = function () {
+    this.inBatchEdit = true;
+  };
+  EditableAgGridMixin.prototype.endBatchEdit = function () {
+    this.inBatchEdit = false;
+    this.doApi('refreshCells');
   };
 
   EditableAgGridMixin.prototype.purgeDataOriginals = function () {
@@ -891,6 +897,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       this.dataOriginals.destroy();
     }
     this.dataOriginals = null;
+    this.set('editedRowsCount', 0);
   };
 
   EditableAgGridMixin.prototype.revertAllEdits = function () {
@@ -906,6 +913,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.set('data', data);
     this.purgeDataOriginals();
     this.set('editedCellCount', 0);
+    this.set('editableEditedCellCount', 0);
     data = null;
   };
   EditableAgGridMixin.prototype.get_dataWOChangedKeys = function () {
@@ -916,38 +924,128 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     return lib.isArray(data) ? data.map(changedCleaner) : data;
   };
 
-  EditableAgGridMixin.prototype.updateRow = function (index, record) {
-    var model = this.doApi('getModel'), rownode, ret;
-    if (!model) {
-      return;
+  EditableAgGridMixin.prototype.getChangedRows = function (onlyeditable) {
+    var ret = [], _ret = ret, data;
+    if (!this.dataOriginals) {
+      return ret;
     }
-    rownode = model.getRowNode(index);
+    data = this.get('data');
+    if (!lib.isArray(data)) {
+      return ret;
+    }
+    this.dataOriginals.traverse(dataOriginalsTraverserForFill.bind(null, changedRowsFiller, onlyeditable, data, _ret));
+    data = null;
+    _ret = null;
+    return ret;
+  };  
+  EditableAgGridMixin.prototype.getChangedRowDeltas = function (onlyeditable) {
+    var ret = [], _ret = ret, data;
+    if (!this.dataOriginals) {
+      return ret;
+    }
+    data = this.get('data');
+    if (!lib.isArray(data)) {
+      return ret;
+    }
+    this.dataOriginals.traverse(dataOriginalsTraverserForFill.bind(null, changedRowDeltasFiller, onlyeditable, data, _ret));
+    data = null;
+    _ret = null;
+    return ret;
+  };
+  
+  EditableAgGridMixin.prototype.updateRowSync = function (index, record) {
+    var rownode, aggridopts, coldefs, oldrec, oldrec4update, prop, coldef;
+    rownode = this.rowNodeForIndex(index);
     if (!rownode) {
       return;
     }
-    //this.forEachRealColumnDef(this.setDataValueRowNodeRecColDef.bind(this, rownode, record));
-    ret = this.reduceRealColumnDefs(this.setDataValueRowNodeRecColDef.bind(this, rownode, record), null);
-    rownode = null;
-    record = null;
-    return ret;
-    //for (prop in record) {
-    //  rownode.setDataValue(prop, record[prop]);
-    //}
-    //rownode.setData(record);
+    aggridopts = this.getConfigVal('aggrid');
+    if (!aggridopts) {
+      return;
+    }
+    coldefs = this.deepCopyColumnDefs();
+    if (!lib.isArray(coldefs)) {
+      return;
+    }
+    oldrec = rownode.data;
+    oldrec4update = lib.extendShallow({}, oldrec);
+    this.data[index] = oldrec4update;
+    for (prop in record) {
+      if (!record.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (record[prop] === oldrec[prop]) {
+        continue;
+      }
+      coldef = outerlib.utils.columnDef.findRealColumnDefByFieldAndDeleteIt(coldefs, prop);
+      if (!coldef){
+        continue;
+      }
+      /**/
+      oldrec4update[prop] = record[prop];
+      this.onCellValueChanged ({
+        oldValue: oldrec[prop],
+        newValue: record[prop],
+        colDef: coldef,
+        rowIndex: index,
+        node: rownode,
+        data: oldrec4update,
+        api: aggridopts.api
+      });
+      /**/
+    }
+    rownode.setData(oldrec4update);
   };
 
-  EditableAgGridMixin.prototype.updateConsecutiveRows = function (rows, startindex, endindex, step, offset) {
-    var i, ret;
+  EditableAgGridMixin.prototype.updateConsecutiveRowsSync = function (rows, startindex, endindex, step, offset) {
+    var i;
+    offset = offset || 0;
+    this.startBatchEdit();
     if (step > 0) {
       for (i = startindex; i <= endindex; i+=step) {
-        ret = this.updateRow(i, rows[i]);
+        this.updateRowSync(i, rows[i+offset]);
       }
     }
     if (step < 0) {
       for (i = startindex; i >= endindex; i+=step) {
-        ret = this.updateRow(i, rows[i]);
+        this.updateRowSync(i, rows[i+offset]);
       }
     }
+    this.endBatchEdit();
+  };
+
+  EditableAgGridMixin.prototype.updateRow = function (index, record) {
+    var rownode, ret;
+    rownode = this.rowNodeForIndex(index);
+    if (!rownode) {
+      return;
+    }
+    ret = this.reduceRealColumnDefs(this.setDataValueRowNodeRecColDef.bind(this, rownode, record), null);
+    rownode = null;
+    record = null;
+    return ret;
+    //rownode.setData(record);
+  };
+
+
+  EditableAgGridMixin.prototype.updateConsecutiveRows = function (rows, startindex, endindex, step, offset) {
+    var i, ret;
+    offset = offset || 0;
+    this.startBatchEdit();
+    if (step > 0) {
+      for (i = startindex; i <= endindex; i+=step) {
+        ret = this.updateRow(i, rows[i+offset]);
+      }
+    }
+    if (step < 0) {
+      for (i = startindex; i >= endindex; i+=step) {
+        ret = this.updateRow(i, rows[i+offset]);
+      }
+    }
+    ret.then(
+      this.endBatchEdit.bind(this),
+      this.endBatchEdit.bind(this)
+    )
     return ret;
   };
 
@@ -969,6 +1067,12 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       , 'revertAllEdits'
       , 'get_dataWOChangedKeys'
       , 'dataCleanOfChangedKeys'
+      , 'getChangedRows'
+      , 'getChangedRowDeltas'
+      , 'startBatchEdit'
+      , 'endBatchEdit'
+      , 'updateRowSync'
+      , 'updateConsecutiveRowsSync'
       , 'updateRow'
       , 'updateConsecutiveRows'
       , 'setDataValueRowNodeRecColDef'
@@ -997,12 +1101,55 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       if (!record.hasOwnProperty(prop)) {
         continue;
       }
-      if (changedDetector(true, prop)){
+      if (changeKeyDetector(prop)){
         continue;
       }
       ret[prop] = record[prop];
     }
     return ret;
+  }
+  function changeKeyDetector (name) {
+    if (name == EditableEditedCountPropName) {
+      return true;
+    }
+    if (name.substr(0, ChangedKeyPrefix.length) == ChangedKeyPrefix) {
+      return true;
+    }
+    if (name.substr(-ChangedKeySuffix.length) == ChangedKeySuffix) {
+      return true;
+    }
+  }
+
+  function dataOriginalsTraverserForFill (cb, onlyeditable, allrows, changedrows, origrow, changedindex) {
+    if (!lib.isFunction(cb)) {
+      return;
+    }
+    var rec = allrows[changedindex];
+    if (onlyeditable && !(rec[EditableEditedCountPropName]>0)) {
+      return;
+    }
+    cb(onlyeditable, allrows, changedrows, origrow, changedindex, rec);
+  }
+
+  function changedRowsFiller (onlyeditable, allrows, changedrows, origrow, changedindex, rec) {
+    changedrows.push(rec);
+  }  
+  function changedRowDeltasFiller (onlyeditable, allrows, changedrows, origrow, changedindex, rec) {
+    var deltas = {}, prop, delta;
+    for(prop in origrow) {
+      if (!origrow.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (!rec.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (!(lib.isNumber(origrow[prop]) && lib.isNumber(rec[prop]))) {
+        deltas[prop] = rec[prop];
+        continue;
+      }
+      deltas[prop] = rec[prop]-origrow[prop];
+    }
+    changedrows.push(deltas);
   }
 }
 module.exports = addCellValueHandling;
@@ -1022,6 +1169,7 @@ module.exports = createGridMixins;
   'use strict';
 
   var mylib = {
+    utils: require('./utils')(execlib.lib),
     jobs: require('./jobs')(execlib),
     gridmixins: null
   };
@@ -1034,7 +1182,7 @@ module.exports = createGridMixins;
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./elements":9,"./formatters":10,"./gridmixins":13,"./jobs":16,"./parsers":17}],15:[function(require,module,exports){
+},{"./elements":9,"./formatters":10,"./gridmixins":13,"./jobs":16,"./parsers":17,"./utils":20}],15:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -1184,4 +1332,117 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}]},{},[14]);
+},{}],19:[function(require,module,exports){
+function createColumnDefUtils (lib, outerlib) {
+  'use strict';
+
+  var mylib = {};
+
+  ////////forEach
+  function forEachRealColumnDef (arry, cb) {
+    if (!lib.isArray(arry)) {
+      return;
+    };
+    arry.forEach(doColumnDefInForEach.bind(null, cb));
+    cb = null;
+  };
+  function doColumnDefInForEach (cb, coldef) {
+    if (!coldef) {
+      return;
+    }
+    if (lib.isArray(coldef.children)) {
+      forEachRealColumnDef(coldef.children, cb);
+      return;
+    }
+    cb (coldef);
+  };
+  mylib.forEachRealColumnDef = forEachRealColumnDef;
+  ////////forEach end
+
+  ////////reduce
+  function reduceRealColumnDefs (arry, cb, initvalue) {
+    var ret;
+    if (!lib.isArray(arry)) {
+      return initvalue;
+    };
+    ret = arry.reduce(doColumnDefInReduce.bind(null, cb), initvalue);
+    cb = null;
+    return ret;
+  };
+  function doColumnDefInReduce (cb, res, coldef) {
+    if (!coldef) {
+      return res;
+    }
+    if (lib.isArray(coldef.children)) {
+      return reduceRealColumnDefs(coldef.children, cb, res);
+    }
+    return cb (res, coldef);
+  };
+  mylib.reduceRealColumnDefs = reduceRealColumnDefs;
+  ////////reduce end
+
+  //deepCopy
+  function deepCopy (coldefs) {
+    var i, ret, coldef;
+    if (!lib.isArray(coldefs)) {
+      return null;
+    }
+    ret = [];
+    for (i=0; i<coldefs.length; i++) {
+      coldef = lib.extend({}, coldefs[i]);
+      if (lib.isArray(coldef.children)) {
+        coldef.children = deepCopy(coldefs[i].children);
+      }
+      ret.push(coldef);
+    }
+    return ret;
+  }
+  mylib.deepCopy = deepCopy;
+  //deepCopy end
+
+  //find
+  function findRealColumnDefByField (coldefs, fldname, cb) {
+    var i, coldef, ret;
+    if (!lib.isArray(coldefs)) {
+      return null;
+    }
+    for (i=0; i<coldefs.length; i++) {
+      coldef = coldefs[i];
+      if (lib.isArray(coldef.children)) {
+        ret = findRealColumnDefByField(coldef.children, fldname, cb);
+        if (ret) {
+          return ret;
+        }
+      }
+      if (coldef && coldef.field == fldname) {
+        if (lib.isFunction(cb)) {
+          cb(coldef, coldefs, i);
+        }
+        return coldef;
+      }
+    }
+  }
+  mylib.findRealColumnDefByField = findRealColumnDefByField;
+  function findRealColumnDefByFieldAndDeleteIt (coldefs, fldname) {
+    return findRealColumnDefByField(coldefs, fldname, deleterOnFound);
+  }
+  function deleterOnFound (coldef, coldefs, index) {
+    coldefs.splice(index, 1);
+  }
+  mylib.findRealColumnDefByFieldAndDeleteIt = findRealColumnDefByFieldAndDeleteIt;
+  //find end
+
+  outerlib.columnDef = mylib;
+}
+module.exports = createColumnDefUtils;
+},{}],20:[function(require,module,exports){
+function createUtils (lib) {
+  'use strict';
+
+  var mylib = {};
+  require('./columndefutilscreator')(lib, mylib);
+
+  return mylib;
+}
+module.exports = createUtils;
+},{"./columndefutilscreator":19}]},{},[14]);
