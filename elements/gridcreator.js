@@ -9,6 +9,7 @@ function createGrid (execlib, applib, mylib) {
     this.fullWidthRowManagers = null;
     this.checkOptions(options);
     WebElement.call(this, id, options);
+    mylib.gridmixins.ContextMenuable.call(this, options);
     this.data = null;
     this.selections = new lib.Map();
     this.rowSelected = this.createBufferableHookCollection();
@@ -17,6 +18,7 @@ function createGrid (execlib, applib, mylib) {
     this.masterRowCollapsing = this.createBufferableHookCollection();
   }
   lib.inherit(AgGridElement, WebElement);
+  mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -42,6 +44,7 @@ function createGrid (execlib, applib, mylib) {
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
+    mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
@@ -54,6 +57,7 @@ function createGrid (execlib, applib, mylib) {
     this.makeUpRunTimeConfiguration(runtimeconfobj);
     if (this.$element && this.$element.length) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), runtimeconfobj));
+      this.listenForContextMenu();
       this.onAgGridElementCreated();
       /*
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {

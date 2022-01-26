@@ -433,6 +433,7 @@ function createGrid (execlib, applib, mylib) {
     this.fullWidthRowManagers = null;
     this.checkOptions(options);
     WebElement.call(this, id, options);
+    mylib.gridmixins.ContextMenuable.call(this, options);
     this.data = null;
     this.selections = new lib.Map();
     this.rowSelected = this.createBufferableHookCollection();
@@ -441,6 +442,7 @@ function createGrid (execlib, applib, mylib) {
     this.masterRowCollapsing = this.createBufferableHookCollection();
   }
   lib.inherit(AgGridElement, WebElement);
+  mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -466,6 +468,7 @@ function createGrid (execlib, applib, mylib) {
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
+    mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
@@ -478,6 +481,7 @@ function createGrid (execlib, applib, mylib) {
     this.makeUpRunTimeConfiguration(runtimeconfobj);
     if (this.$element && this.$element.length) {
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), runtimeconfobj));
+      this.listenForContextMenu();
       this.onAgGridElementCreated();
       /*
       new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), {
@@ -803,6 +807,161 @@ function createNumberFormatters (execlib, mylib) {
 module.exports = createNumberFormatters;
 
 },{}],12:[function(require,module,exports){
+function createContextMenuableMixin (execlib, outerlib, mylib) {
+  'use strict';
+  var lib = execlib.lib;
+
+  function MenuHolder (options) {
+    this.uid = lib.uid();
+    this.menu = jQuery('<ul>');
+    this.menu.attr({id: this.uid});
+    this.menu.css({position:'absolute'});
+    this.menu.hide();
+    if (options && options.class) {
+      this.menu.addClass(options.class);
+    }
+    this.clicker = this.onClick.bind(this);
+    this.chooser = this.itemChooser.bind(this);
+    this.items = null;
+    jQuery('body').append(this.menu);
+    jQuery(document).on('click', this.clicker);
+  }
+  MenuHolder.prototype.destroy = function () {
+    this.items = null;
+    this.chooser = null;
+    if (this.clicker) {
+      jQuery(document).off('click', this.clicker);
+    }
+    this.clicker = null;
+    if (this.menu) {
+      this.body.remove(this.menu);
+    }
+    this.menu = null;
+    this.uid = null;
+  };
+  MenuHolder.prototype.addItems = function (items) {
+    if (!this.menu) {
+      return;
+    }
+    this.items = null;
+    this.menu.find('li').off('click', this.clicker);
+    this.menu.empty();
+    if (!lib.isArray(items)) {
+      return;
+    }
+    this.items = items;
+    items.forEach(this.addItem.bind(this));
+  };
+  MenuHolder.prototype.showFromEvent = function (evnt) {
+    this.menu.css({
+      left: evnt.pageX+'px',
+      top: evnt.pageY+'px'
+    });
+    this.menu.show();
+  };
+  MenuHolder.prototype.addItem = function (item, index) {
+    var li = this.item2Li(item, index);
+    if (li && li[0]) {
+      this.menu.append(li);
+    }
+  };
+  MenuHolder.prototype.onClick = function (evnt) {
+    if (!this.menu.is(':visible')) {
+      return;
+    }
+    if (!(evnt && evnt.target)) {
+      return;
+    }
+    if (jQuery(evnt.target).parents('#'+this.uid).length<1) {
+      this.menu.hide();
+      return;
+    }
+  };
+  MenuHolder.prototype.item2Li = function (item, index) {
+    var ret = jQuery('<li>');
+    ret.attr('itemindex', index+'');
+    if (!item) {
+      ret.addClass('separator');
+      return ret;
+    }
+    if (item.caption) {
+      ret.text(item.caption);
+    }
+    ret.on('click', this.chooser);
+    return ret;
+  };
+  MenuHolder.prototype.itemChooser = function (evnt) {
+    var li, index, item;
+    this.menu.hide();
+    if (!(evnt && evnt.target)){
+      return;
+    }
+    if (!lib.isArray(this.items)) {
+      return;
+    }
+    li = jQuery(evnt.target);
+    index = parseInt(li.attr('itemindex'));
+    if (isNaN(index)) {
+      return;
+    }
+    if (index < 0 || index >= this.items.length) {
+      return;
+    }
+    item = this.items[index];
+    if (lib.isFunction(item.action)) {
+      item.action();
+    }
+  };
+
+  function ContextMenuableAgGridMixin (options) {
+    this.ctxMenuDescriptor = (options && options.contextmenu) ? options.contextmenu.items : null;
+    this.onContextMenuer = this.onContextMenu.bind(this);
+    this.holder = new MenuHolder(options.contextmenu);
+  }
+  ContextMenuableAgGridMixin.prototype.destroy = function () {
+    if (this.holder) {
+      this.holder.destroy();
+    }
+    this.holder = null;
+    if (this.$element) {
+      this.$element.off('contextmenu', this.onContextMenuer);
+    }
+    this.onContextMenuer = null;
+    this.ctxMenuDescriptor = null;
+  };
+  ContextMenuableAgGridMixin.prototype.listenForContextMenu = function () {
+    this.$element.on('contextmenu', this.onContextMenuer);
+  };
+  ContextMenuableAgGridMixin.prototype.onContextMenu = function (evnt) {
+    if (!this.ctxMenuDescriptor) {
+      return;
+    }
+    if (!(evnt && evnt.target && evnt.target.__agComponent)) {
+      return;
+    }
+    evnt.preventDefault();
+    evnt.stopPropagation();
+    //console.log(evnt.target.__agComponent);
+    if (lib.isFunction(this.ctxMenuDescriptor)) {
+      this.holder.addItems(this.ctxMenuDescriptor(evnt.target.__agComponent));
+    } else {
+      this.holder.addItems(this.ctxMenuDescriptor);
+    }
+    this.holder.showFromEvent(evnt);
+  };
+
+  ContextMenuableAgGridMixin.addMethods = function (klass) {
+    lib.inheritMethods(klass, ContextMenuableAgGridMixin
+      ,'listenForContextMenu'
+      ,'onContextMenu'
+      ,'purgeContextMenu'
+    );
+  }
+
+  mylib.ContextMenuable = ContextMenuableAgGridMixin;
+}
+module.exports = createContextMenuableMixin;
+},{}],13:[function(require,module,exports){
 function addCellValueHandling (execlib, outerlib, mylib) {
   'use strict';
 
@@ -1153,18 +1312,19 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
 }
 module.exports = addCellValueHandling;
-},{}],13:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 function createGridMixins (execlib, outerlib) {
   'use strict';
 
   var mylib = {};
 
   require('./editablemixincreator')(execlib, outerlib, mylib);
+  require('./contextmenuablemixincreator')(execlib, outerlib, mylib);
 
   outerlib.gridmixins = mylib;
 }
 module.exports = createGridMixins;
-},{"./editablemixincreator":12}],14:[function(require,module,exports){
+},{"./contextmenuablemixincreator":12,"./editablemixincreator":13}],15:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
@@ -1182,7 +1342,7 @@ module.exports = createGridMixins;
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./elements":9,"./formatters":10,"./gridmixins":13,"./jobs":16,"./parsers":17,"./utils":20}],15:[function(require,module,exports){
+},{"./elements":9,"./formatters":10,"./gridmixins":14,"./jobs":17,"./parsers":18,"./utils":21}],16:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -1254,7 +1414,7 @@ function createCellUpdaterJob (execlib, mylib) {
   mylib.CellUpdater = CellUpdaterJob;
 }
 module.exports = createCellUpdaterJob;
-},{}],16:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 function createJobs (execlib) {
   'use strict';
 
@@ -1265,7 +1425,7 @@ function createJobs (execlib) {
   return mylib;
 }
 module.exports = createJobs;
-},{"./cellupdatercreator":15}],17:[function(require,module,exports){
+},{"./cellupdatercreator":16}],18:[function(require,module,exports){
 function createParsers (execlib, outerlib) {
   'use strict';
 
@@ -1280,7 +1440,7 @@ function createParsers (execlib, outerlib) {
 }
 module.exports = createParsers;
 
-},{"./numbercreator":18}],18:[function(require,module,exports){
+},{"./numbercreator":19}],19:[function(require,module,exports){
 function createNumberParsers (execlib, mylib) {
   'use strict';
 
@@ -1332,7 +1492,7 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}],19:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 function createColumnDefUtils (lib, outerlib) {
   'use strict';
 
@@ -1435,7 +1595,7 @@ function createColumnDefUtils (lib, outerlib) {
   outerlib.columnDef = mylib;
 }
 module.exports = createColumnDefUtils;
-},{}],20:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 function createUtils (lib) {
   'use strict';
 
@@ -1445,4 +1605,4 @@ function createUtils (lib) {
   return mylib;
 }
 module.exports = createUtils;
-},{"./columndefutilscreator":19}]},{},[14]);
+},{"./columndefutilscreator":20}]},{},[15]);
