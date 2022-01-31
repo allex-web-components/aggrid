@@ -834,7 +834,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     }
     this.clicker = null;
     if (this.menu) {
-      this.body.remove(this.menu);
+      jQuery('body').remove(this.menu);
     }
     this.menu = null;
     this.uid = null;
