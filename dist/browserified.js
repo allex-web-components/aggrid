@@ -408,11 +408,11 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     desc = {
       name: cls,
       type: this.options.detailRowCtor,
-      options: {
+      options: lib.extend(this.options.detailRowCtorOptions, {
         target_on_parent: '.'+cls,
         actual: true,
         agFullWidthRow: params.data.allexAgFullWidthRowInfo.orig_data
-      }
+      })
     };
     (new mylib.jobs.DetailRowCreator(this, params, desc)).go();
     return gui;
@@ -812,21 +812,25 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   var lib = execlib.lib;
 
   function MenuHolder (options) {
+    options = options || {};
+    options.item = options.item || {};
     this.uid = lib.uid();
     this.menu = jQuery('<ul>');
     this.menu.attr({id: this.uid});
     this.menu.css({position:'absolute'});
     this.menu.hide();
-    if (options && options.class) {
+    if (options.class) {
       this.menu.addClass(options.class);
     }
     this.clicker = this.onClick.bind(this);
     this.chooser = this.itemChooser.bind(this);
     this.items = null;
+    this.itemClass = options.item.class || '';
     jQuery('body').append(this.menu);
     jQuery(document).on('click', this.clicker);
   }
   MenuHolder.prototype.destroy = function () {
+    this.itemClass = null;
     this.items = null;
     this.chooser = null;
     if (this.clicker) {
@@ -879,6 +883,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   };
   MenuHolder.prototype.item2Li = function (item, index) {
     var ret = jQuery('<li>');
+    ret.addClass(this.itemClass);
     ret.attr('itemindex', index+'');
     if (!item) {
       ret.addClass('separator');
