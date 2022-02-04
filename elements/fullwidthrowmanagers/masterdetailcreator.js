@@ -163,7 +163,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     desc = {
       name: cls,
       type: this.options.detailRowCtor,
-      options: lib.extend(this.options.detailRowCtorOptions, {
+      options: lib.extend({}, this.options.detailRowCtorOptions, {
         target_on_parent: '.'+cls,
         actual: true,
         agFullWidthRow: params.data.allexAgFullWidthRowInfo.orig_data
