@@ -23,19 +23,20 @@ function createFullWidthRowManagerBase (execlib, applib, outerlib, mylib) {
     throw new lib.Error('NOT_IMPLMENTED', 'render has to be implemented by '+this.constructor.name);
   };
 
-  FullWidthRowManagerBase.prototype.fullWidthRowData = function (masterrowdata) {
+  FullWidthRowManagerBase.prototype.fullWidthRowData = function (masterrowparams) {
     var ret = lib.extend(
       {},
-      masterrowdata,
+      masterrowparams.data,
       {
         allexAgFullWidthRowInfo: {
-          orig_data: masterrowdata,
+          orig_data: masterrowparams.data,
           instance: null,
           handler: null
         }
       }
     );
     ret.allexAgFullWidthRowInfo.instance = this;
+    ret.allexAgFullWidthRowInfo.nodeIndex = masterrowparams.node.id;
     return ret;
   };
 

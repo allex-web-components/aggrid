@@ -211,7 +211,7 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
     if (!columndefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId"');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -268,7 +268,7 @@ function createGrid (execlib, applib, mylib) {
         obj.valueParser = prser.bind(null, params);
       }
     }
-    return lib.isString(obj.field);
+    return lib.isString(obj.field) || lib.isVal(obj.colId);
   }
 
   applib.registerElementType('AgGrid', AgGridElement);

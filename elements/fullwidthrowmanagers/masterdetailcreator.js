@@ -16,6 +16,10 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     this.agparams = null;
     WebElement.prototype.__cleanUp.call(this);
   };
+  DetailRowElement.prototype.set_agparams = function (agprms) {
+    this.agparams = agprms;
+    return true;
+  };
   DetailRowElement.prototype.setRowHeightAtOnce = function (height) {
     this.agparams.node.setRowHeight(height);
     this.__parent.doApi('onRowHeightChanged');
@@ -135,6 +139,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
         newdata.allexAgFullWidthRowInfo.handler = null;
         newdata.allexAgFullWidthRowInfo.orig_data = null;
         newdata.allexAgFullWidthRowInfo.instance = null;
+        newdata.allexAgFullWidthRowInfo.nodeIndex = null;
       }
       params.data.allexAgFullWidthRowExpanded = false;
       this.gridEl.masterRowCollapsing.fire(params.data);
@@ -144,7 +149,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
       clicked.classList.remove('ag-icon-tree-closed');
       clicked.classList.add('ag-icon-tree-open');
     }
-    newdata = this.fullWidthRowData(params.data);
+    newdata = this.fullWidthRowData(params);
     params.data.allexAgFullWidthRowExpanded = true;
     this.gridEl.data.splice(index+1, 0, newdata);
     this.gridEl.doApi('applyTransaction', {
@@ -165,8 +170,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
       type: this.options.detailRowCtor,
       options: lib.extend({}, this.options.detailRowCtorOptions, {
         target_on_parent: '.'+cls,
-        actual: true,
-        agFullWidthRow: params.data.allexAgFullWidthRowInfo.orig_data
+        actual: true
       })
     };
     (new mylib.jobs.DetailRowCreator(this, params, desc)).go();

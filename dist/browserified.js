@@ -97,19 +97,20 @@ function createFullWidthRowManagerBase (execlib, applib, outerlib, mylib) {
     throw new lib.Error('NOT_IMPLMENTED', 'render has to be implemented by '+this.constructor.name);
   };
 
-  FullWidthRowManagerBase.prototype.fullWidthRowData = function (masterrowdata) {
+  FullWidthRowManagerBase.prototype.fullWidthRowData = function (masterrowparams) {
     var ret = lib.extend(
       {},
-      masterrowdata,
+      masterrowparams.data,
       {
         allexAgFullWidthRowInfo: {
-          orig_data: masterrowdata,
+          orig_data: masterrowparams.data,
           instance: null,
           handler: null
         }
       }
     );
     ret.allexAgFullWidthRowInfo.instance = this;
+    ret.allexAgFullWidthRowInfo.nodeIndex = masterrowparams.node.id;
     return ret;
   };
 
@@ -261,6 +262,10 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
     this.agparams = null;
     WebElement.prototype.__cleanUp.call(this);
   };
+  DetailRowElement.prototype.set_agparams = function (agprms) {
+    this.agparams = agprms;
+    return true;
+  };
   DetailRowElement.prototype.setRowHeightAtOnce = function (height) {
     this.agparams.node.setRowHeight(height);
     this.__parent.doApi('onRowHeightChanged');
@@ -380,6 +385,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
         newdata.allexAgFullWidthRowInfo.handler = null;
         newdata.allexAgFullWidthRowInfo.orig_data = null;
         newdata.allexAgFullWidthRowInfo.instance = null;
+        newdata.allexAgFullWidthRowInfo.nodeIndex = null;
       }
       params.data.allexAgFullWidthRowExpanded = false;
       this.gridEl.masterRowCollapsing.fire(params.data);
@@ -389,7 +395,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
       clicked.classList.remove('ag-icon-tree-closed');
       clicked.classList.add('ag-icon-tree-open');
     }
-    newdata = this.fullWidthRowData(params.data);
+    newdata = this.fullWidthRowData(params);
     params.data.allexAgFullWidthRowExpanded = true;
     this.gridEl.data.splice(index+1, 0, newdata);
     this.gridEl.doApi('applyTransaction', {
@@ -410,8 +416,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
       type: this.options.detailRowCtor,
       options: lib.extend({}, this.options.detailRowCtorOptions, {
         target_on_parent: '.'+cls,
-        actual: true,
-        agFullWidthRow: params.data.allexAgFullWidthRowInfo.orig_data
+        actual: true
       })
     };
     (new mylib.jobs.DetailRowCreator(this, params, desc)).go();
@@ -635,7 +640,7 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
     if (!columndefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have fields "field"');
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId"');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -692,7 +697,7 @@ function createGrid (execlib, applib, mylib) {
         obj.valueParser = prser.bind(null, params);
       }
     }
-    return lib.isString(obj.field);
+    return lib.isString(obj.field) || lib.isVal(obj.colId);
   }
 
   applib.registerElementType('AgGrid', AgGridElement);
