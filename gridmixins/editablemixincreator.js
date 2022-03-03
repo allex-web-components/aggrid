@@ -163,7 +163,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       return;
     }
     oldrec = rownode.data;
-    oldrec4update = lib.extendShallow({}, oldrec);
+    oldrec4update = lib.isFunction(oldrec.clone) ? oldrec.clone() : lib.extendShallow({}, oldrec);
     this.data[index] = oldrec4update;
     for (prop in record) {
       if (!record.hasOwnProperty(prop)) {
