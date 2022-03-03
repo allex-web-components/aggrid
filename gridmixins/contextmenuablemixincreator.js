@@ -129,6 +129,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.$element.on('contextmenu', this.onContextMenuer);
   };
   ContextMenuableAgGridMixin.prototype.onContextMenu = function (evnt) {
+    var ctxmenudesc;
     if (!this.ctxMenuDescriptor) {
       return;
     }
@@ -138,11 +139,11 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     evnt.preventDefault();
     evnt.stopPropagation();
     //console.log(evnt.target.__agComponent);
-    if (lib.isFunction(this.ctxMenuDescriptor)) {
-      this.holder.addItems(this.ctxMenuDescriptor(evnt.target.__agComponent));
-    } else {
-      this.holder.addItems(this.ctxMenuDescriptor);
+    ctxmenudesc = lib.isFunction(this.ctxMenuDescriptor) ? this.ctxMenuDescriptor(evnt.target.__agComponent) : this.ctxMenuDescriptor;
+    if (!ctxmenudesc) {
+      return;
     }
+    this.holder.addItems(ctxmenudesc);
     this.holder.showFromEvent(evnt);
   };
 
