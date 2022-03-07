@@ -768,7 +768,7 @@ function createNumberFormatters (execlib, mylib) {
     var mant, exp, mantfull;
     if (eind>0) {
       mant = ret.substring(0, eind);
-      mantfull = mant.replace(/[^0-9]/g, '');
+      mantfull = mant.replace(/[^-0-9]/g, '');
       exp = parseInt(ret.substr(eind+2));
       while (mantfull.length<exp+1) {
         mantfull = mantfull+'0';
