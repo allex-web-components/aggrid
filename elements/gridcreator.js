@@ -284,8 +284,8 @@ function createGrid (execlib, applib, mylib) {
     AgGridElement.prototype.__cleanUp.call(this);
   };
   EditableAgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
-    obj.onCellValueChanged = this.onCellValueChanger;
     AgGridElement.prototype.makeUpRunTimeConfiguration.call(this, obj);
+    mylib.gridmixins.Editable.prototype.makeUpRunTimeConfiguration.call(this, obj);
   };
   EditableAgGridElement.prototype.onAgGridElementCreated = function () {
       //this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
