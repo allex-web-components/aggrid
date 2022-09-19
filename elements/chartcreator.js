@@ -21,9 +21,9 @@ function createChart (execlib, applib, mylib) {
     if (this.$element && this.$element.length) {
       this.chartOpts = lib.extend({
         container: this.$element[0],
-      }, this.getConfigVal('agchart'),{
+      },{
         data: []
-      });
+      }, this.getConfigVal('agchart'));
       console.log('agcreatopts', this.chartOpts);
       this.chart = agCharts.AgChart.create(this.chartOpts);
       //this.set('data', this.getConfigVal('data'));

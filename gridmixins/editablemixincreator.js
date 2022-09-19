@@ -7,9 +7,21 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     ChangedKeySuffix = '_changed',
     EditableEditedCountPropName = ChangedKeyPrefix+'editableEditedCount';
 
+  function trackablesArry (thingy) {
+    if (lib.isArray(thingy)) {
+      return thingy;
+    }
+    if (lib.isString(thingy)) {
+      return thingy.split(',');
+    }
+    return [];
+  }
+
   function EditableAgGridMixin (options) {
     this.cellEdited = this.createBufferableHookCollection();
+    this.trackablepropnames = trackablesArry(options.trackablepropnames);
     this.editablepropnames = null;
+    this.changeablepropnames = null;
     this.onCellValueChanger = this.onCellValueChanged.bind(this);
     this.dataOriginals = null;
     this.editedCellCount = 0;
@@ -33,7 +45,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.editableEditedCellCount = null;
     this.editedCellCount = null;
     this.onCellValueChanger = null;
+    this.changeablepropnames = null;
     this.editablepropnames = null;
+    this.trackablepropnames = null;
     if (this.cellEdited) {
       this.cellEdited.destroy();
     }
@@ -52,6 +66,8 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       return;
     }
     this.editablepropnames = coldefs.reduce(editableChooser, []);
+    this.changeablepropnames = this.editablepropnames.slice();
+    lib.arryOperations.appendNonExistingItems(this.changeablepropnames, this.trackablepropnames);
   };
 
   function editableChooser (res, coldef) {
@@ -181,27 +197,39 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     _ret = null;
     return ret;
   };
-  EditableAgGridMixin.prototype.getChangedRowsWithOriginalsWOChangedKeys = function (prefixsuffixobj) {
+  EditableAgGridMixin.prototype.getChangedRowsWithOriginalsWOChangedKeys = function (prefixsuffixobj, onlyedited) {
     var newdata = this.dataCleanOfChangedKeys(this.get('data'), true);
     var indices = this.dataOriginals.keys().sort(function (a,b) {return a - b});
-    var i, rec, origrec;
+    var lookupnames = onlyedited?this.editablepropnames:this.changeablepropnames;
+    var i, rec, origrec, chng, ret;
     if (newdata.length != indices.length) {
       throw new lib.Error('LENGTH_MISMATCH', 'New data has '+newdata.length+' items, but it should have been '+indices.length+' items');
     }
+    ret = [];
     for (i=0; i<indices.length; i++) {
       rec = newdata[i];
       origrec = this.dataOriginals.get(indices[i]);
-      this.editablepropnames.forEach(origdataadder.bind(null, rec, origrec, prefixsuffixobj));
+      chng = this.changeablepropnames.reduce(origdataadder.bind(null, rec, origrec, prefixsuffixobj, lookupnames), 0);
+      console.log('chng', chng);
+      if (chng) {
+        ret.push(rec);
+      }
       rec = null;
       origrec = null;
     }
-    return newdata;
+    prefixsuffixobj = null;
+    lookupnames = null;
+    return ret;
   };
 
-  function origdataadder (rec, origrec, prefixsuffixobj, propname) {
+  function origdataadder (rec, origrec, prefixsuffixobj, allowedpropnames, res, propname) {
     var pref = prefixsuffixobj ? (prefixsuffixobj.prefix || 'original') : 'original',
       suff = prefixsuffixobj ? (prefixsuffixobj.suffix || '') : '';
+    if ((rec[propname] !== origrec[propname]) && allowedpropnames.indexOf(propname)>-1) {
+      res ++;
+    }
     rec[pref+propname+suff] = origrec[propname];
+    return res;
   }
 
   
@@ -345,7 +373,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (name.substr(-ChangedKeySuffix.length) != ChangedKeySuffix) {
       return;
     }
-    if (val) {
+    if (lib.isVal(val)) {
       return true;
     }
   }
@@ -410,7 +438,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       ?
       rec[prop]-origrow[prop]
       :
-      ( this.editablepropnames.indexOf(prop)>=0 ? rec[prop]-origrow[prop] : origrow[prop] )
+      ( this.changeablepropnames.indexOf(prop)>=0 ? rec[prop]-origrow[prop] : origrow[prop] )
       ;
     }
     changedrows.push(deltas);
