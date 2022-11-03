@@ -54,7 +54,13 @@ function createColumnDefUtils (lib, outerlib) {
     }
     ret = [];
     for (i=0; i<coldefs.length; i++) {
-      coldef = lib.extend({}, coldefs[i]);
+      coldef = lib.extend({}, lib.pickExcept(coldefs[i], [
+        'valueGetter',
+        'valueFormatter',
+        'keyCreator',
+        'cellEditor',
+        'cellEditorParams'
+      ]));
       if (lib.isArray(coldef.children)) {
         coldef.children = deepCopy(coldefs[i].children);
       }

@@ -112,6 +112,9 @@ function createGrid (execlib, applib, mylib) {
   AgGridElement.prototype.queueRefresh = function () {
     lib.runNext(this.refresh.bind(this), 100);
   };
+  AgGridElement.prototype.addRow = function (rec) {
+    this.set('data', (this.get('data')||[]).concat([rec||{}]));
+  };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected';
     if (selected) {
@@ -211,7 +214,7 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
     if (!columndefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId"');
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -268,7 +271,7 @@ function createGrid (execlib, applib, mylib) {
         obj.valueParser = prser.bind(null, params);
       }
     }
-    return lib.isString(obj.field) || lib.isVal(obj.colId);
+    return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
 
   applib.registerElementType('AgGrid', AgGridElement);

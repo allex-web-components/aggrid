@@ -541,6 +541,9 @@ function createGrid (execlib, applib, mylib) {
   AgGridElement.prototype.queueRefresh = function () {
     lib.runNext(this.refresh.bind(this), 100);
   };
+  AgGridElement.prototype.addRow = function (rec) {
+    this.set('data', (this.get('data')||[]).concat([rec||{}]));
+  };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected';
     if (selected) {
@@ -640,7 +643,7 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
     if (!columndefs.every(isColumnOk)) {
-      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId"');
+      throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -697,7 +700,7 @@ function createGrid (execlib, applib, mylib) {
         obj.valueParser = prser.bind(null, params);
       }
     }
-    return lib.isString(obj.field) || lib.isVal(obj.colId);
+    return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
 
   applib.registerElementType('AgGrid', AgGridElement);
@@ -867,6 +870,8 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
       top: evnt.pageY+'px'
     });
     this.menu.show();
+    evnt.preventDefault();
+    evnt.stopPropagation();
   };
   MenuHolder.prototype.addItem = function (item, index) {
     var li = this.item2Li(item, index);
@@ -925,10 +930,13 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
 
   function ContextMenuableAgGridMixin (options) {
     this.ctxMenuDescriptor = (options && options.contextmenu) ? options.contextmenu.items : null;
+    this.globalCtxMenuDescriptor = (options && options.globalcontextmenu) ? options.globalcontextmenu.items : null;
+    this.holder = (options && options.contextmenu) ? new MenuHolder(options.contextmenu) : null;
+    this.globalHolder = (options && options.globalcontextmenu) ? new MenuHolder(options.globalcontextmenu) : null;
     this.onContextMenuer = this.onContextMenu.bind(this);
-    this.holder = new MenuHolder(options.contextmenu);
   }
   ContextMenuableAgGridMixin.prototype.destroy = function () {
+    this.onContextMenuer = null;
     if (this.holder) {
       this.holder.destroy();
     }
@@ -936,7 +944,6 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     if (this.$element) {
       this.$element.off('contextmenu', this.onContextMenuer);
     }
-    this.onContextMenuer = null;
     this.ctxMenuDescriptor = null;
   };
   ContextMenuableAgGridMixin.prototype.listenForContextMenu = function () {
@@ -944,14 +951,18 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   };
   ContextMenuableAgGridMixin.prototype.onContextMenu = function (evnt) {
     var ctxmenudesc;
-    if (!this.ctxMenuDescriptor) {
+    if (!(this.ctxMenuDescriptor || this.globalCtxMenuDescriptor)) {
       return;
     }
     if (!(evnt && evnt.target && evnt.target.__agComponent)) {
+      ctxmenudesc = lib.isFunction(this.globalCtxMenuDescriptor) ? this.globalCtxMenuDescriptor() : this.globalCtxMenuDescriptor;
+      if (!ctxmenudesc) {
+        return;
+      }
+      this.globalHolder.addItems(ctxmenudesc);
+      this.globalHolder.showFromEvent(evnt);
       return;
     }
-    evnt.preventDefault();
-    evnt.stopPropagation();
     //console.log(evnt.target.__agComponent);
     ctxmenudesc = lib.isFunction(this.ctxMenuDescriptor) ? this.ctxMenuDescriptor(evnt.target.__agComponent) : this.ctxMenuDescriptor;
     if (!ctxmenudesc) {
@@ -1386,7 +1397,13 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!lib.isFunction(cb)) {
       return;
     }
+    if (!lib.isArray(allrows)) {
+      return;
+    }
     var rec = allrows[changedindex];
+    if (!rec) {
+      return;
+    }
     if (onlyeditable && !(rec[EditableEditedCountPropName]>0)) {
       return;
     }
@@ -1671,7 +1688,13 @@ function createColumnDefUtils (lib, outerlib) {
     }
     ret = [];
     for (i=0; i<coldefs.length; i++) {
-      coldef = lib.extend({}, coldefs[i]);
+      coldef = lib.extend({}, lib.pickExcept(coldefs[i], [
+        'valueGetter',
+        'valueFormatter',
+        'keyCreator',
+        'cellEditor',
+        'cellEditorParams'
+      ]));
       if (lib.isArray(coldef.children)) {
         coldef.children = deepCopy(coldefs[i].children);
       }

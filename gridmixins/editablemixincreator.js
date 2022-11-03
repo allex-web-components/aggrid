@@ -411,7 +411,13 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!lib.isFunction(cb)) {
       return;
     }
+    if (!lib.isArray(allrows)) {
+      return;
+    }
     var rec = allrows[changedindex];
+    if (!rec) {
+      return;
+    }
     if (onlyeditable && !(rec[EditableEditedCountPropName]>0)) {
       return;
     }
