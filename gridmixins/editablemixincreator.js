@@ -222,14 +222,56 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     lookupnames = null;
     return ret;
   };
+  //options properties
+  //start => inclusive start record index
+  //end => inclusive end record index
+  //prefix => for propertyname of original values
+  //suffix => for propertyname of original values
+  //clean => if changed keys should be removed
+  EditableAgGridMixin.prototype.getRowsWithOriginals = function (options) {
+    var data, start, end, lookupnames, i, rec, origrec, chng, ret;
+    data = this.get('data');
+    if (!lib.isArray(data)) {
+      return null;
+    }
+    start = (options && lib.isNumber(options.start)) ? options.start : 0;
+    if (start<0) {
+      start = 0;
+    }
+    end = (options && lib.isNumber(options.end)) ? options.end : data.length-1;
+    if (end>data.length-1) {
+      end = data.length-1;
+    }
+    ret = [];
+    lookupnames = this.changeablepropnames;
+    for (i=0; i<=end; i++) {
+      rec = data[i];
+      origrec = this.dataOriginals.get(i);
+      chng = this.changeablepropnames.reduce(origdataadder.bind(null, rec, origrec, options, lookupnames), 0);
+      if (options.clean) {
+        changedCleaner(false, ret, rec);
+      } else {
+        ret.push(rec);
+      }
+      rec = null;
+      origrec = null;
+    }
+    options = null;
+    lookupnames = null;
+    return ret;
+  };
 
   function origdataadder (rec, origrec, prefixsuffixobj, allowedpropnames, res, propname) {
     var pref = prefixsuffixobj ? (prefixsuffixobj.prefix || 'original') : 'original',
       suff = prefixsuffixobj ? (prefixsuffixobj.suffix || '') : '';
-    if ((rec[propname] !== origrec[propname]) && allowedpropnames.indexOf(propname)>-1) {
-      res ++;
+    if (origrec) {
+      if ((rec[propname] !== origrec[propname]) && allowedpropnames.indexOf(propname)>-1) {
+        res ++;
+      }
+      rec[pref+propname+suff] = origrec[propname];
+      return res;
     }
-    rec[pref+propname+suff] = origrec[propname];
+    rec[pref+propname+suff] = rec[propname];
     return res;
   }
 
@@ -352,6 +394,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       , 'getChangedRows'
       , 'getChangedRowDeltas'
       , 'getChangedRowsWithOriginalsWOChangedKeys'
+      , 'getRowsWithOriginals'
       , 'startBatchEdit'
       , 'endBatchEdit'
       , 'updateRowSync'
