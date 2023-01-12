@@ -1053,7 +1053,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     }
     this.editablepropnames = coldefs.reduce(editableChooser, []);
     this.changeablepropnames = this.editablepropnames.slice();
+    this.trackablepropnames.forEach(checkTrackableInColDefs.bind(null, coldefs));
     lib.arryOperations.appendNonExistingItems(this.changeablepropnames, this.trackablepropnames);
+    coldefs = null;
   };
 
   function editableChooser (res, coldef) {
@@ -1065,6 +1067,15 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     }
     return res;
   }
+
+  function checkTrackableInColDefs (coldefs, trackablename) {
+    var col = outerlib.utils.columnDef.findRealColumnDefByField(coldefs, trackablename);
+    if (!col) {
+      throw new lib.Error('TRACKABLW_NAME_NOT_A_COLDEF_NAME', 'Trackable name '+trackablename+' is not a name of any columnDef');
+    }
+  }
+
+
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
