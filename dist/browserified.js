@@ -1481,11 +1481,14 @@ function addCellValueHandling (execlib, outerlib, mylib) {
         deltas[prop] = rec[prop];
         continue;
       }
+      deltas[prop] = this[onlyeditable ? 'editablepropnames' : 'changeablepropnames'].indexOf(prop)>=0 ? rec[prop]-origrow[prop] : origrow[prop];
+      /*
       deltas[prop] = onlyeditable 
       ?
       rec[prop]-origrow[prop]
       :
       ( this.changeablepropnames.indexOf(prop)>=0 ? rec[prop]-origrow[prop] : origrow[prop] )
+      */
       ;
     }
     changedrows.push(deltas);
