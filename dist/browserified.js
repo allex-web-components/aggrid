@@ -545,9 +545,17 @@ function createGrid (execlib, applib, mylib) {
     this.set('data', (this.get('data')||[]).concat([rec||{}]));
   };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
-    var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected';
+    var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected', prevselected, aggridopts;
     if (selected) {
-      this.selections.replace(typename, evntdata.data);
+      prevselected = this.selections.replace(typename, evntdata.data);
+      aggridopts = this.getConfigVal('aggrid');
+      if (
+        aggridopts && 
+        aggridopts.rowSelection=='single' && 
+        prevselected
+      ) {
+        this[typename+'Unselected'].fire(prevselected);
+      }
     } else {
       if (this.selections.get(typename) != evntdata.data) {
         return;
@@ -562,6 +570,21 @@ function createGrid (execlib, applib, mylib) {
       return null;
     }
     return model.getRowNode(index);
+  };
+  AgGridElement.prototype.rowNodeForDataRow = function (row) {
+    var index;
+    if (!(lib.isArray(this.data) && this.data.length>0)) {
+      return null;
+    }
+    index = this.data.indexOf(row);
+    return index<0 ? null : this.rowNodeForIndex(index);
+  };
+  AgGridElement.prototype.selectDataRow = function (row) {
+    var node = this.rowNodeForDataRow(row);
+    if (!node) {
+      return;
+    }
+    node.setSelected(true);
   };
 
   AgGridElement.prototype.doApi = function (fnname) {
@@ -616,6 +639,7 @@ function createGrid (execlib, applib, mylib) {
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
     obj.onRowSelected = this.onAnySelection.bind(this, 'row');
+    obj.onRowUnselected = this.onAnySelection.bind(this, 'row');
   };
   AgGridElement.prototype.onAgGridElementCreated = function () {
     this.set('data', this.getConfigVal('data'));
