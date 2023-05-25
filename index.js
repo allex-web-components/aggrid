@@ -9,6 +9,7 @@
   require('./gridmixins')(execlib, mylib);
 
   require('./formatters')(execlib, mylib);
+  require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
   require('./elements')(execlib, mylib);
 

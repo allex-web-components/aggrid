@@ -1,4 +1,163 @@
 (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
+function createAllexBaseEditor (execlib, outerlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib;
+  var lR = execlib.execSuite.libRegistry;
+  var applib = lR.get('allex_applib');
+
+  function AllexBaseEditor () {
+    this.initParams = null;
+    this.containerCell = null;
+    this.panel = null;
+    this.resizeListener = this.onResize.bind(this);
+    this.resizeObserver = null;
+  }
+  AllexBaseEditor.prototype.destroy = function () {
+    optionallyChangeOtherFields.call(this);
+    if (this.resizeObserver) {
+      this.resizeObserver.unobserve(this.containerCell);
+    }
+    this.resizeListener = null;
+    if (this.panel) {
+      this.panel.destroy();
+    }
+    this.panel = null;
+    this.containerCell = null;
+    this.initParams = null;
+  };
+  AllexBaseEditor.prototype.init = function (params) {
+    var parentel, pname;
+    this.initParams = params;
+    pname = params.parentelementname;
+    if (params.eGridCell) {
+      this.containerCell = params.eGridCell;
+      this.resizeObserver = new ResizeObserver(this.resizeListener);
+      this.resizeObserver.observe(this.containerCell);
+    }
+    if (pname) {
+      parentel = applib.App.getElement('element.'+pname);
+      if (parentel) {
+        this.panel = parentel.createElement(this.panelDescriptor(parentel));
+      }
+    }
+  };
+  AllexBaseEditor.prototype.getGui = function () {
+    return this.panel ? this.panel.$element[0] : null;
+  };
+  AllexBaseEditor.prototype.getValue = function () {
+    return this.panel ? this.editValueOfPanel() : null;
+  };
+  AllexBaseEditor.prototype.isCancelBeforeStart = function () {
+    return !this.panel;
+  };
+  AllexBaseEditor.prototype.isCancelAfterEnd = function () {
+    return !this.panel;
+  };
+  AllexBaseEditor.prototype.afterGuiAttached = function () {
+    this.onResize();
+  };
+
+  AllexBaseEditor.prototype.onResize = function () {
+    if (this.containerCell && this.panel && this.panel.$element) {
+      var p = this.panel.$element.parent();
+      p.width(this.containerCell.clientWidth);
+      p.height(this.containerCell.clientHeight);
+    }
+  };
+  AllexBaseEditor.prototype.editValueOfPanel = function () {
+    return this.panel.get('value');
+  };
+  AllexBaseEditor.prototype.getOtherPropsAndValuesToChangeAfterSelfEdit = function () {
+    return null;
+  };
+
+  AllexBaseEditor.prototype.panelDescriptor = function (parentel) {
+    throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement panelDescriptor');
+  };
+
+  //statics
+  function isPropAndVal (thingy) {
+    return lib.isArray(thingy) && thingy.length==2 && lib.isNonEmptyString(thingy[0]);
+  }
+  function optionallyChangeOtherFields () {
+    var psandvs = this.getOtherPropsAndValuesToChangeAfterSelfEdit();
+    if (lib.isArrayOfHaving(psandvs, isPropAndVal)) {
+      lib.runNext(dataValueSetterFromArry.bind(null, this.initParams.node, psandvs));
+      psandvs = null;
+    }
+  }
+  //endof statics
+
+  function dataValueSetterFromArry (node, psandvals) {
+    psandvals.forEach(dataValueSetter.bind(null, node));
+    node = null;
+  }
+  function dataValueSetter (node, propandval) {
+    node.setDataValue(propandval[0], propandval[1]);
+    node = null;
+    propandval = null;
+  }
+
+  mylib.AllexBase = AllexBaseEditor;
+}
+module.exports = createAllexBaseEditor;
+},{}],2:[function(require,module,exports){
+function createAllexLookupEditor (execlib, outerlib, mylib) {
+  'use strict';
+
+  var Base = mylib.AllexBase;
+  var lib = execlib.lib;
+
+  var lR = execlib.execSuite.libRegistry;
+  var o = lR.get('allex_templateslitelib').override;
+  var m = lR.get('allex_htmltemplateslib');
+
+  function AllexLookupEditor () {
+    Base.call(this);
+  }
+  lib.inherit(AllexLookupEditor, Base);
+  AllexLookupEditor.prototype.destroy = function () {
+    Base.prototype.destroy.call(this);
+  };
+  AllexLookupEditor.prototype.panelDescriptor = function (parentel) {
+    var options = lib.extend({
+      actual: true,
+      default_markup: o(m.textinput
+        , 'CLASS', 'form-control form-select'
+        ),
+      value: this.initParams.value
+    }, this.initParams.options);
+
+    return {
+      type: 'CustomSelect',
+      name: 'LookupEditor',
+      options: options
+    }
+  };
+  AllexLookupEditor.prototype.isPopup = function () {
+    return true;
+  };
+  AllexLookupEditor.prototype.editValueOfPanel = function () {
+    return this.panel.get('htmlvalue');
+  };
+
+  mylib.AllexLookup = AllexLookupEditor;
+}
+module.exports = createAllexLookupEditor;
+},{}],3:[function(require,module,exports){
+function createEditors (execlib, mylib) {
+  'use strict';
+
+  var editors = {};
+
+  require('./allexbaseeditorcreator')(execlib, mylib, editors);
+  require('./allexlookupeditorcreator')(execlib, mylib, editors);
+
+  mylib.editors = editors;
+}
+module.exports = createEditors;
+},{"./allexbaseeditorcreator":1,"./allexlookupeditorcreator":2}],4:[function(require,module,exports){
 function createChart (execlib, applib, mylib) {
   'use strict';
 
@@ -71,7 +230,7 @@ function createChart (execlib, applib, mylib) {
 }
 module.exports = createChart;
 
-},{}],2:[function(require,module,exports){
+},{}],5:[function(require,module,exports){
 function createFullWidthRowManagerBase (execlib, applib, outerlib, mylib) {
   'use strict';
 
@@ -117,7 +276,7 @@ function createFullWidthRowManagerBase (execlib, applib, outerlib, mylib) {
   mylib.FullWidthRowManagerBase = FullWidthRowManagerBase;
 }
 module.exports = createFullWidthRowManagerBase;
-},{}],3:[function(require,module,exports){
+},{}],6:[function(require,module,exports){
 function createFullWidthRowManagers (execlib, applib, outerlib) {
   'use strict';
 
@@ -140,7 +299,7 @@ function createFullWidthRowManagers (execlib, applib, outerlib) {
   return mylib;
 }
 module.exports = createFullWidthRowManagers;
-},{"./basecreator":2,"./jobs":6,"./masterdetailcreator":7}],4:[function(require,module,exports){
+},{"./basecreator":5,"./jobs":9,"./masterdetailcreator":10}],7:[function(require,module,exports){
 function createBaseFullWidthRowJob (execlib, applib, outerlib, mylib) {
   'use strict';
 
@@ -174,7 +333,7 @@ function createBaseFullWidthRowJob (execlib, applib, outerlib, mylib) {
   mylib.Base = JobOnFullWidthRowManagerBase;
 }
 module.exports = createBaseFullWidthRowJob;
-},{}],5:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 function createDetailRowCreator (execlib, applib, outerlib, mylib) {
   'use strict';
 
@@ -233,7 +392,7 @@ function createDetailRowCreator (execlib, applib, outerlib, mylib) {
   mylib.DetailRowCreator = DetailRowCreatorJob;
 }
 module.exports = createDetailRowCreator;
-},{}],6:[function(require,module,exports){
+},{}],9:[function(require,module,exports){
 function createFullWidthRowJobs (execlib, applib, outerlib) {
   'use strict';
 
@@ -243,7 +402,7 @@ function createFullWidthRowJobs (execlib, applib, outerlib) {
   return mylib;
 }
 module.exports = createFullWidthRowJobs;
-},{"./basecreator":4,"./detailrowcreatorcreator":5}],7:[function(require,module,exports){
+},{"./basecreator":7,"./detailrowcreatorcreator":8}],10:[function(require,module,exports){
 function createMasterDetailManager (execlib, applib, outerlib, mylib) {
   'use strict';
 
@@ -426,7 +585,7 @@ function createMasterDetailManager (execlib, applib, outerlib, mylib) {
   mylib.MasterDetailManager = MasterDetailManager;
 }
 module.exports = createMasterDetailManager;
-},{}],8:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 function createGrid (execlib, applib, mylib) {
   'use strict';
   
@@ -760,7 +919,7 @@ function createGrid (execlib, applib, mylib) {
 }
 module.exports = createGrid;
 
-},{"./fullwidthrowmanagers":3}],9:[function(require,module,exports){
+},{"./fullwidthrowmanagers":6}],12:[function(require,module,exports){
 function createElements (execlib, mylib) {
   'use strict';
 
@@ -772,7 +931,7 @@ function createElements (execlib, mylib) {
 }
 module.exports = createElements;
 
-},{"./chartcreator":1,"./gridcreator":8}],10:[function(require,module,exports){
+},{"./chartcreator":4,"./gridcreator":11}],13:[function(require,module,exports){
 function createFormatters (execlib, outerlib) {
   'use strict';
 
@@ -787,7 +946,7 @@ function createFormatters (execlib, outerlib) {
 }
 module.exports = createFormatters;
 
-},{"./numbercreator":11}],11:[function(require,module,exports){
+},{"./numbercreator":14}],14:[function(require,module,exports){
 function createNumberFormatters (execlib, mylib) {
   'use strict';
 
@@ -842,7 +1001,7 @@ function createNumberFormatters (execlib, mylib) {
 }
 module.exports = createNumberFormatters;
 
-},{}],12:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 function createContextMenuableMixin (execlib, outerlib, mylib) {
   'use strict';
   var lib = execlib.lib;
@@ -1011,7 +1170,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   mylib.ContextMenuable = ContextMenuableAgGridMixin;
 }
 module.exports = createContextMenuableMixin;
-},{}],13:[function(require,module,exports){
+},{}],16:[function(require,module,exports){
 function addCellValueHandling (execlib, outerlib, mylib) {
   'use strict';
 
@@ -1670,7 +1829,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
 }
 module.exports = addCellValueHandling;
-},{}],14:[function(require,module,exports){
+},{}],17:[function(require,module,exports){
 function createGridMixins (execlib, outerlib) {
   'use strict';
 
@@ -1682,7 +1841,7 @@ function createGridMixins (execlib, outerlib) {
   outerlib.gridmixins = mylib;
 }
 module.exports = createGridMixins;
-},{"./contextmenuablemixincreator":12,"./editablemixincreator":13}],15:[function(require,module,exports){
+},{"./contextmenuablemixincreator":15,"./editablemixincreator":16}],18:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
@@ -1694,13 +1853,14 @@ module.exports = createGridMixins;
   require('./gridmixins')(execlib, mylib);
 
   require('./formatters')(execlib, mylib);
+  require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
   require('./elements')(execlib, mylib);
 
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./elements":9,"./formatters":10,"./gridmixins":14,"./jobs":17,"./parsers":18,"./utils":22}],16:[function(require,module,exports){
+},{"./editors":3,"./elements":12,"./formatters":13,"./gridmixins":17,"./jobs":20,"./parsers":21,"./utils":25}],19:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -1772,7 +1932,7 @@ function createCellUpdaterJob (execlib, mylib) {
   mylib.CellUpdater = CellUpdaterJob;
 }
 module.exports = createCellUpdaterJob;
-},{}],17:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 function createJobs (execlib) {
   'use strict';
 
@@ -1783,7 +1943,7 @@ function createJobs (execlib) {
   return mylib;
 }
 module.exports = createJobs;
-},{"./cellupdatercreator":16}],18:[function(require,module,exports){
+},{"./cellupdatercreator":19}],21:[function(require,module,exports){
 function createParsers (execlib, outerlib) {
   'use strict';
 
@@ -1798,7 +1958,7 @@ function createParsers (execlib, outerlib) {
 }
 module.exports = createParsers;
 
-},{"./numbercreator":19}],19:[function(require,module,exports){
+},{"./numbercreator":22}],22:[function(require,module,exports){
 function createNumberParsers (execlib, mylib) {
   'use strict';
 
@@ -1850,7 +2010,7 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}],20:[function(require,module,exports){
+},{}],23:[function(require,module,exports){
 function createBlankRowFunctionality (lib, mylib) {
   'use strict';
 
@@ -1897,7 +2057,7 @@ function createBlankRowFunctionality (lib, mylib) {
   };
 }
 module.exports = createBlankRowFunctionality;
-},{}],21:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 function createColumnDefUtils (lib, outerlib) {
   'use strict';
 
@@ -2006,7 +2166,7 @@ function createColumnDefUtils (lib, outerlib) {
   outerlib.columnDef = mylib;
 }
 module.exports = createColumnDefUtils;
-},{}],22:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 function createUtils (lib) {
   'use strict';
 
@@ -2017,4 +2177,4 @@ function createUtils (lib) {
   return mylib;
 }
 module.exports = createUtils;
-},{"./blankrowfunctionalitycreator":20,"./columndefutilscreator":21}]},{},[15]);
+},{"./blankrowfunctionalitycreator":23,"./columndefutilscreator":24}]},{},[18]);
