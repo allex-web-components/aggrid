@@ -79,6 +79,9 @@ function createGrid (execlib, applib, mylib) {
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
     }
+    if (this.getConfigVal('blankRow')) {
+      this.doApi('applyTransaction', {add: [mylib.utils.blankRow.new()]});
+    }
     this.refresh();
   };
   AgGridElement.prototype.get_pinnedBottom = function (datarecords) {
@@ -319,9 +322,10 @@ function createGrid (execlib, applib, mylib) {
     AgGridElement.prototype.onAgGridElementCreated.call(this);
   };
   EditableAgGridElement.prototype.set_data = function (data) {
-    this.purgeDataOriginals();
+    this.justUndoEdits();
+    this.revertAllEdits();
     return AgGridElement.prototype.set_data.call(this, data);
-  }
+  };
 
   applib.registerElementType('EditableAgGrid', EditableAgGridElement);
 }

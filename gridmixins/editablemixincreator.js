@@ -3,6 +3,45 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   var lib = execlib.lib;
 
+  function ChangedCells () {
+    lib.Map.call(this);
+  }
+  lib.inherit(ChangedCells, lib.Map);
+  ChangedCells.prototype.check = function (rowindex, prop, indirection) {
+      var changes = this.get(rowindex), chindex;
+      if (!changes) {
+        if (!indirection) {
+          return false;
+        }
+        changes = [prop];
+        this.add(rowindex, changes);
+        return true;
+      }
+      chindex = changes.indexOf(prop);
+      if (indirection) {
+        if (chindex<0) {
+          changes.push(prop);
+          return true;
+        }
+        return false;
+      }
+      if (chindex>=0) {
+        changes.splice(chindex, 1);
+        return true;
+      }
+      return false;
+  };
+  ChangedCells.prototype.cellCount = function () {
+    var cntobj = {cnt: 0}, ret;
+    this.traverse(cellcounter.bind(null, cntobj));
+    ret = cntobj.cnt;
+    cntobj = null;
+    return ret;
+  };
+  function cellcounter (cntobj, cells, rowindex) {
+    cntobj.cnt += cells.length;
+  };
+
   var ChangedKeyPrefix = 'allexAgGrid_',
     ChangedKeySuffix = '_changed',
     EditableEditedCountPropName = ChangedKeyPrefix+'editableEditedCount';
@@ -24,11 +63,16 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.changeablepropnames = null;
     this.onCellValueChanger = this.onCellValueChanged.bind(this);
     this.dataOriginals = null;
+    this.changedEditableCells = null;
+    this.changedNonEditableCells = null;
     this.changedCellCount = 0;
     this.editedCellCount = 0;
     this.editedRowsCount = 0;
+    this.addedRowCount = 0;
+    this.changedByUser = false;
     this.inBatchEdit = false;
     this.batchEditEvents = null;
+    this.internalChange = false;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -41,8 +85,11 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       }
     }
     */
+    this.internalChange = null;
     this.batchEditEvents = null;
     this.inBatchEdit = null;
+    this.changedByUser = null;
+    this.addedRowCount = null;
     this.editedRowsCount = null;
     this.editedCellCount = null;
     this.changedCellCount = null;
@@ -103,6 +150,12 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       this.dataOriginals = new lib.Map();
     }
+    if (!this.changedEditableCells) {
+      this.changedEditableCells = new ChangedCells();
+    }
+    if (!this.changedNonEditableCells) {
+      this.changedNonEditableCells = new ChangedCells();
+    }
     fieldname = params.colDef.field;
     editableedited = params.colDef && params.colDef.editable;
     rec = this.dataOriginals.get(params.rowIndex);
@@ -112,6 +165,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       this.dataOriginals.add(params.rowIndex, rec);
     }
     changed = params.data[fieldname]!==rec[fieldname];
+    this[editableedited ? 'changedEditableCells' : 'changedNonEditableCells'].check(params.rowIndex, fieldname, changed);
     changedcountdelta = changed ? 1 : -1;
     if (!(EditableEditedCountPropName in params.data)) {
       params.data[EditableEditedCountPropName] = 0;
@@ -123,6 +177,12 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!ChangedKeyPrefix)
     if (noChanged(params.data)) {
       params.data = this.dataOriginals.remove(params.rowIndex);
+    }
+    if (outerlib.utils.blankRow.isEditFinished(params.data, this.getConfigVal('blankRow'))) {
+      this.internalChange = true;
+      this.set('data', [outerlib.utils.blankRow.toRegular(params.data)].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.internalChange = false;
+      this.set('addedRowCount', this.get('addedRowCount')+1);
     }
     if (!this.inBatchEdit) {
         params.api.refreshCells();
@@ -139,11 +199,10 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       )
       return;
     }
-    this.set('changedCellCount', this.get('changedCellCount') + changedcountdelta);
-    if (editableedited) {
-      this.set('editedCellCount', this.get('editedCellCount') + (changed ? 1 : -1));
-    }
+    this.set('editedCellCount', this.changedEditableCells.cellCount());
+    this.set('changedCellCount', this.get('editedCellCount') + this.changedNonEditableCells.cellCount());
     this.set('editedRowsCount', this.dataOriginals.count);
+    setChangedByUser.call(this);
   };
 
   EditableAgGridMixin.prototype.startBatchEdit = function () {
@@ -164,15 +223,31 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   };
 
   EditableAgGridMixin.prototype.purgeDataOriginals = function () {
+    if (this.internalChange) {
+      return;
+    }
     if (this.dataOriginals) {
       this.dataOriginals.destroy();
     }
     this.dataOriginals = null;
+    if (this.changedEditableCells) {
+      this.changedEditableCells.destroy();
+    }
+    this.changedEditableCells = null;
+    if (this.changedNonEditableCells) {
+      this.changedNonEditableCells.destroy();
+    }
+    this.changedNonEditableCells = null;
     this.set('editedRowsCount', 0);
+    this.set('changedCellCount', 0);
+    this.set('editedCellCount', 0);
   };
 
   EditableAgGridMixin.prototype.revertAllEdits = function () {
     var data;
+    if (this.internalChange) {
+      return;
+    }
     if (!this.dataOriginals) {
       return;
     }
@@ -180,11 +255,36 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.dataOriginals.traverse(function (val, recindex) {
       data[recindex] = val;
     });
-    //this.purgeDataOriginals();
+    this.internalChange = true;
     this.set('data', data);
+    this.internalChange = false;
     this.purgeDataOriginals();
     this.set('changedCellCount', 0);
     this.set('editedCellCount', 0);
+    this.set('addedRowCount', 0);
+    this.set('changedByUser', false);
+    data = null;
+  };
+  function editundoer (rec, originalrec) {
+    var prop;
+    for (prop in originalrec) {
+      if (rec.hasOwnProperty(prop)) {
+        rec[prop] = originalrec[prop];
+      }
+    }
+  }
+  EditableAgGridMixin.prototype.justUndoEdits = function () {
+    var data;
+    if (this.internalChange) {
+      return;
+    }
+    if (!this.dataOriginals) {
+      return;
+    }
+    data = this.data;
+    this.dataOriginals.traverse(function (val, recindex) {
+      editundoer(data[recindex], val);
+    });
     data = null;
   };
   EditableAgGridMixin.prototype.get_dataWOChangedKeys = function () {
@@ -414,13 +514,24 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     rownode.setDataValue(coldef.field, record[coldef.field]);
     */
     return this.jobs.run('.', new outerlib.jobs.CellUpdater(this, rownode, coldef.field, record[coldef.field]));
+  };
+
+  //statics
+  function setChangedByUser () {
+    this.set('changedByUser', 
+      this.get('editedCellCount')!=0
+      || this.get('changedCellCount')!=0
+      || this.get('addedRowCount')!=0
+    );
   }
+  //endof statics
 
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
       , 'onCellValueChanged'
-      , 'purgeDataOriginals'
+      , 'purgeDataOriginals'      
       , 'revertAllEdits'
+      , 'justUndoEdits'
       , 'get_dataWOChangedKeys'
       , 'get_changedRowsWOChangedKeys'
       , 'dataCleanOfChangedKeys'

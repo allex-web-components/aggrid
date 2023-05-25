@@ -3,6 +3,7 @@ function createUtils (lib) {
 
   var mylib = {};
   require('./columndefutilscreator')(lib, mylib);
+  require('./blankrowfunctionalitycreator')(lib, mylib);
 
   return mylib;
 }
