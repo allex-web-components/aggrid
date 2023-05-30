@@ -1,12 +1,8 @@
-function createAllexLookupEditor (execlib, outerlib, mylib) {
+function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
   'use strict';
 
   var Base = mylib.AllexBase;
   var lib = execlib.lib;
-
-  var lR = execlib.execSuite.libRegistry;
-  var o = lR.get('allex_templateslitelib').override;
-  var m = lR.get('allex_htmltemplateslib');
 
   function AllexLookupEditor () {
     Base.call(this);
@@ -33,8 +29,9 @@ function createAllexLookupEditor (execlib, outerlib, mylib) {
   AllexLookupEditor.prototype.isPopup = function () {
     return true;
   };
+
   AllexLookupEditor.prototype.editValueOfPanel = function () {
-    return this.panel.get('htmlvalue');
+    return this.panel.get('value');
   };
 
   mylib.AllexLookup = AllexLookupEditor;

@@ -59,7 +59,7 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
 
   AllexBaseEditor.prototype.onResize = function () {
     if (this.containerCell && this.panel && this.panel.$element) {
-      var p = this.panel.$element.parent();
+      var p = this.isPopup() ? this.panel.$element.parent() : this.panel.$element;
       p.width(this.containerCell.clientWidth);
       p.height(this.containerCell.clientHeight);
     }
