@@ -12,13 +12,11 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexUniqueEditor.prototype.destroy = function () {
     Base.prototype.destroy.call(this);
   };
-  AllexUniqueEditor.prototype.afterGuiAttached = function () {
-    this.initParams.validations = this.initParams.validations || [];
-    this.initParams.validations.push({
+  AllexUniqueEditor.prototype.getClassLevelValidations = function () {
+    return [{
       invalid: this.checkUniqueness.bind(this),
       class: 'invalid'
-    })
-    Base.prototype.afterGuiAttached.call(this);
+    }];
   };
   AllexUniqueEditor.prototype.checkUniqueness = function (val, oldval) {
     var pdata = this.panel.__parent.get('data') || [];

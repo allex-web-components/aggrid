@@ -191,11 +191,13 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
 
   function AllexInputBaseEditor () {
     Base.call(this);
+    this.classLevelValidations = this.getClassLevelValidations();
     this.valid = true;
   }
   lib.inherit(AllexInputBaseEditor, Base);
   AllexInputBaseEditor.prototype.destroy = function () {
     this.valid = null;
+    this.classLevelValidations = null;
     Base.prototype.destroy.call(this);
   };
   AllexInputBaseEditor.prototype.panelDescriptor = function (parentel) {
@@ -219,17 +221,29 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     this.panel.attachListener('changed', 'value', this.onValueChanged.bind(this));
     Base.prototype.afterGuiAttached.call(this);
   };
-  AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
-    if (!lib.isArray(this.initParams.validations)) {
-      return;
-    }
-    this.initParams.validations.every(validation.bind(this, newval, oldval));
-    newval = null;
-    oldval = null;
-  };
   AllexInputBaseEditor.prototype.isCancelAfterEnd = function () {
     return !this.valid;
   };
+  AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
+    validationProc.call(this, this.initParams.validations, newval, oldval);
+    if (!this.valid) {
+      return;
+    }
+    validationProc.call(this, this.classLevelValidations, newval, oldval);
+  };
+  AllexInputBaseEditor.prototype.getClassLevelValidations = function () {
+    return null;
+  };
+  //static
+  function validationProc (arry, newval, oldval) {
+    if (!lib.isArray(arry)) {
+      return false;
+    }
+    arry.every(validation.bind(this, newval, oldval));
+    newval = null;
+    oldval = null;
+  }
+  //endof static
   function validation (newval, oldval, vld) {
     if (lib.isFunction(vld.invalid)) {
       if (vld.invalid(newval, oldval)) {
@@ -307,13 +321,11 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexUniqueEditor.prototype.destroy = function () {
     Base.prototype.destroy.call(this);
   };
-  AllexUniqueEditor.prototype.afterGuiAttached = function () {
-    this.initParams.validations = this.initParams.validations || [];
-    this.initParams.validations.push({
+  AllexUniqueEditor.prototype.getClassLevelValidations = function () {
+    return [{
       invalid: this.checkUniqueness.bind(this),
       class: 'invalid'
-    })
-    Base.prototype.afterGuiAttached.call(this);
+    }];
   };
   AllexUniqueEditor.prototype.checkUniqueness = function (val, oldval) {
     var pdata = this.panel.__parent.get('data') || [];
