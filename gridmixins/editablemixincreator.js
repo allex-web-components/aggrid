@@ -251,19 +251,23 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       return;
     }
-    data = this.get('data').slice();
-    this.dataOriginals.traverse(function (val, recindex) {
-      data[recindex] = val;
-    });
-    this.internalChange = true;
-    this.set('data', data);
-    this.internalChange = false;
+    if (lib.isArray(this.get('data'))) {
+      data = this.get('data').slice();
+      this.dataOriginals.traverse(function (val, recindex) {
+        data[recindex] = val;
+      });
+      this.internalChange = true;
+      this.set('data', data);
+      this.internalChange = false;
+      this.purgeDataOriginals();
+      this.set('changedCellCount', 0);
+      this.set('editedCellCount', 0);
+      this.set('addedRowCount', 0);
+      this.set('changedByUser', false);
+      data = null;
+      return;
+    }
     this.purgeDataOriginals();
-    this.set('changedCellCount', 0);
-    this.set('editedCellCount', 0);
-    this.set('addedRowCount', 0);
-    this.set('changedByUser', false);
-    data = null;
   };
   function editundoer (rec, originalrec) {
     var prop;
@@ -281,11 +285,15 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       return;
     }
-    data = this.data;
-    this.dataOriginals.traverse(function (val, recindex) {
-      editundoer(data[recindex], val);
-    });
-    data = null;
+    if (lib.isArray(this.data)) {
+      data = this.data;
+      this.dataOriginals.traverse(function (val, recindex) {
+        editundoer(data[recindex], val);
+      });
+      data = null;
+      return;
+    }
+    this.purgeDataOriginals();
   };
   EditableAgGridMixin.prototype.get_dataWOChangedKeys = function () {
     return this.dataCleanOfChangedKeys(this.get('data'), false);
