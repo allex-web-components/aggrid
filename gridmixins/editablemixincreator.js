@@ -58,6 +58,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   function EditableAgGridMixin (options) {
     this.cellEdited = this.createBufferableHookCollection();
+    this.newRowAdded = this.createBufferableHookCollection();
     this.trackablepropnames = trackablesArry(options.trackablepropnames);
     this.editablepropnames = null;
     this.changeablepropnames = null;
@@ -97,6 +98,10 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.changeablepropnames = null;
     this.editablepropnames = null;
     this.trackablepropnames = null;
+    if(this.newRowAdded) {
+       this.newRowAdded.destroy();
+    }
+    this.newRowAdded = null;
     if (this.cellEdited) {
       this.cellEdited.destroy();
     }
@@ -141,7 +146,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
-    var rec, fieldname, editableedited, changed, changedcountdelta;
+    var rec, fieldname, editableedited, changed, changedcountdelta, newrow;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -179,10 +184,12 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       params.data = this.dataOriginals.remove(params.rowIndex);
     }
     if (outerlib.utils.blankRow.isEditFinished(params.data, this.getConfigVal('blankRow'))) {
+      newrow = outerlib.utils.blankRow.toRegular(params.data);
       this.internalChange = true;
-      this.set('data', [outerlib.utils.blankRow.toRegular(params.data)].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
+      this.newRowAdded.fire(newrow);
     }
     if (!this.inBatchEdit) {
         params.api.refreshCells();

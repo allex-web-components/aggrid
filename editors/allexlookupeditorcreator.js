@@ -30,10 +30,6 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
     return true;
   };
 
-  AllexLookupEditor.prototype.editValueOfPanel = function () {
-    return this.panel.get('value');
-  };
-
   mylib.AllexLookup = AllexLookupEditor;
 }
 module.exports = createAllexLookupEditor;
