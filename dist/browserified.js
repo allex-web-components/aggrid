@@ -27,7 +27,7 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     this.initParams = null;
   };
   AllexBaseEditor.prototype.init = function (params) {
-    var parentel, pname;
+    var parentel, pname, paneldesc;
     this.initParams = params;
     pname = params.parentelementname;
     if (params.eGridCell) {
@@ -38,7 +38,11 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     if (pname) {
       parentel = applib.App.getElement('element.'+pname);
       if (parentel) {
-        this.panel = parentel.createElement(this.panelDescriptor(parentel));
+        paneldesc = this.panelDescriptor(parentel);
+        paneldesc.options = paneldesc.options || {};
+        paneldesc.options.onInitiallyLoaded = paneldesc.options.onInitiallyLoaded || [];
+        paneldesc.options.onInitiallyLoaded.push(this.onPanelInitiallyLoaded.bind(this));
+        this.panel = parentel.createElement(paneldesc);
       }
     }
   };
@@ -56,11 +60,15 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   };
   AllexBaseEditor.prototype.afterGuiAttached = function () {
     this.onResize();
+    if (this.isPopup()) {
+      this.panel.$element.parent().attr('tabIndex', -1);
+    }
   };
 
   AllexBaseEditor.prototype.onResize = function () {
+    var p;
     if (this.containerCell && this.panel && this.panel.$element) {
-      var p = this.isPopup() ? this.panel.$element.parent() : this.panel.$element;
+      p = this.isPopup() ? this.panel.$element.parent() : this.panel.$element;
       p.width(this.containerCell.clientWidth);
       p.height(this.containerCell.clientHeight);
     }
@@ -74,6 +82,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
 
   AllexBaseEditor.prototype.panelDescriptor = function (parentel) {
     throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement panelDescriptor');
+  };
+  AllexBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    var a = 5;
   };
 
   //statics
@@ -186,7 +197,6 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     }
   }
 
-    
   applib.registerElementType('EditorInputHolder', EditorInputHolderElement);
 
   function AllexInputBaseEditor () {
@@ -223,6 +233,15 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   };
   AllexInputBaseEditor.prototype.isCancelAfterEnd = function () {
     return !this.valid;
+  };
+  AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    try {
+      var el = panel.getElement('Input').$element;
+      lib.runNext(el.trigger.bind(el, 'focus'));
+      el = null;
+    }catch(e){
+      console.error(e);
+    }
   };
   AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
     validationProc.call(this, this.initParams.validations, newval, oldval);
@@ -297,6 +316,11 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
   };
   AllexLookupEditor.prototype.isPopup = function () {
     return true;
+  };
+  AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    var el = panel.$element;
+    lib.runNext(el.trigger.bind(el, 'focus'));
+    el = null;
   };
 
   mylib.AllexLookup = AllexLookupEditor;
@@ -799,6 +823,7 @@ function createGrid (execlib, applib, mylib) {
 
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
+    this.optionLevelHandlers = new lib.Map();
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
@@ -808,10 +833,12 @@ function createGrid (execlib, applib, mylib) {
     this.rowUnselected = this.createBufferableHookCollection();
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
+    this.selectedRows = null;
   }
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.selectedRows = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
     }
@@ -841,6 +868,10 @@ function createGrid (execlib, applib, mylib) {
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
     }
+    if (this.optionLevelHandlers) {
+      this.optionLevelHandlers.destroy();
+    }
+    this.optionLevelHandlers = null;
     this.fullWidthRowManagers = null;
   };
   AgGridElement.prototype.doThejQueryCreation = function () {
@@ -1004,8 +1035,8 @@ function createGrid (execlib, applib, mylib) {
 
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
-    obj.onRowSelected = this.onAnySelection.bind(this, 'row');
-    obj.onRowUnselected = this.onAnySelection.bind(this, 'row');
+    this.setAgGridHandler(obj, 'onRowSelected', this.onAnySelection.bind(this, 'row'));
+    this.setAgGridHandler(obj, 'onRowUnselected', this.onAnySelection.bind(this, 'row'));
   };
   AgGridElement.prototype.onAgGridElementCreated = function () {
     this.set('data', this.getConfigVal('data'));
@@ -1020,6 +1051,11 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
     }
     gridconf = options.aggrid;
+    this.setAgGridHandler(gridconf, 'onSelectionChanged', this.onSelectionChanged.bind(this));
+    if (options.blankRow) {
+      gridconf.rowSelection = gridconf.rowSelection || 'single';
+    }
+
     this.checkColumnDefs(gridconf.columnDefs);
     gridconf.rowData = gridconf.rowData || [];
     this.fullWidthRowManagers = fullWidthRowLib.createFullWidthRowManagers(this, options);
@@ -1028,6 +1064,17 @@ function createGrid (execlib, applib, mylib) {
       gridconf.fullWidthCellRenderer = this.fullWidthCellRenderer.bind(this);
     }
   };
+  function multiHandler (funcs, evnt) {
+    var i;
+    if (!lib.isArray(funcs)) {
+      return;
+    }
+    funcs.forEach(function (func) {if (lib.isFunction(func)) func(evnt);});
+  }
+  AgGridElement.prototype.setAgGridHandler = function (gridconf, name, handler) {
+    var h = gridconf[name];
+    gridconf[name] = multiHandler.bind(null, [h, handler]);
+  };
   AgGridElement.prototype.checkColumnDefs = function (columndefs) {
     if (!lib.isArray(columndefs)) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
@@ -1035,6 +1082,18 @@ function createGrid (execlib, applib, mylib) {
     if (!columndefs.every(isColumnOk)) {
       throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
+  };
+  AgGridElement.prototype.onSelectionChanged = function (evnt) {
+    if (!(evnt && evnt.api)) {
+      return;
+    }
+    var selnodes = evnt.api.getSelectedNodes();
+    var areselnodesarry = lib.isArray(selnodes);
+    var selnode = (areselnodesarry && selnodes.length>0) ? selnodes[selnodes.length-1] : null;
+    if  (selnode) {
+      console.log('selected node', selnode);
+    }
+    this.set('selectedRows', areselnodesarry ? selnodes.reduce(dataer, []) : []);
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
     var ret;
@@ -1069,6 +1128,12 @@ function createGrid (execlib, applib, mylib) {
     return -1;
   };
 
+  function dataer (res, node) {
+    if (node && node.data) {
+      res.push(node.data);
+    }
+    return res;
+  }
 
   function isColumnOk (obj) {
     var name, params, fmter, prser;
@@ -1092,6 +1157,8 @@ function createGrid (execlib, applib, mylib) {
     }
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
+
+
 
   applib.registerElementType('AgGrid', AgGridElement);
 
@@ -1136,6 +1203,61 @@ function createElements (execlib, mylib) {
 module.exports = createElements;
 
 },{"./chartcreator":6,"./gridcreator":13}],15:[function(require,module,exports){
+function createGridFields (execlib, lR, mylib) {
+  'use strict';
+
+  var lib = execlib.lib,
+    applib = lR.get('allex_applib'),
+    formlib = lR.get('allex_formwebcomponent'),
+    EditableAgGridElement = applib.getElementType('EditableAgGrid'),
+    FieldBaseMixin = formlib.mixins.FieldBase;
+
+  function EditableAgGridFieldElement (id, options) {
+    EditableAgGridElement.call(this, id, options);
+    FieldBaseMixin.call(this, options);
+  }
+  lib.inherit(EditableAgGridFieldElement, EditableAgGridElement);
+  FieldBaseMixin.addMethods(EditableAgGridFieldElement); //now EditableAgGrid's set_data is stomped over
+  EditableAgGridFieldElement.prototype.__cleanUp = function () {
+    FieldBaseMixin.prototype.destroy.call(this);
+    EditableAgGridElement.prototype.__cleanUp.call(this);
+  };
+  EditableAgGridFieldElement.prototype.set_data = function (data) { //redefine it even further
+    var ret = FieldBaseMixin.prototype.set_data.call(this, data);
+    this.doPropertyFromHash(data, 'rows');
+    return ret;
+  };
+  /*
+  EditableAgGridFieldElement.prototype.get_data = function () {
+    return EditableAgGridElement.prototype.get_data.call(this);
+  };
+  */
+  EditableAgGridFieldElement.prototype.set_rows = function (rows) {
+    return EditableAgGridElement.prototype.set_data.call(this, rows);
+  };
+  EditableAgGridFieldElement.prototype.isValueValid = function (val) {
+    console.log('EditableAgGridFieldElement isValueValid?', val);
+    return true;
+  };
+  EditableAgGridFieldElement.prototype.resetData = function () {
+    this.set('data', []);
+  };
+
+  applib.registerElementType('EditableAgGridField', EditableAgGridFieldElement);
+}
+module.exports = createGridFields;
+},{}],16:[function(require,module,exports){
+function createFields (execlib, mylib) {
+  'use strict';
+
+  var lR = execlib.execSuite.libRegistry;
+
+  require('./gridcreator')(execlib, lR, mylib);
+  //require('./chartcreator')(execlib, applib, mylib);
+}
+module.exports = createFields;
+
+},{"./gridcreator":15}],17:[function(require,module,exports){
 function createFormatters (execlib, outerlib) {
   'use strict';
 
@@ -1150,7 +1272,7 @@ function createFormatters (execlib, outerlib) {
 }
 module.exports = createFormatters;
 
-},{"./numbercreator":16}],16:[function(require,module,exports){
+},{"./numbercreator":18}],18:[function(require,module,exports){
 function createNumberFormatters (execlib, mylib) {
   'use strict';
 
@@ -1205,7 +1327,7 @@ function createNumberFormatters (execlib, mylib) {
 }
 module.exports = createNumberFormatters;
 
-},{}],17:[function(require,module,exports){
+},{}],19:[function(require,module,exports){
 function createContextMenuableMixin (execlib, outerlib, mylib) {
   'use strict';
   var lib = execlib.lib;
@@ -1374,7 +1496,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   mylib.ContextMenuable = ContextMenuableAgGridMixin;
 }
 module.exports = createContextMenuableMixin;
-},{}],18:[function(require,module,exports){
+},{}],20:[function(require,module,exports){
 function addCellValueHandling (execlib, outerlib, mylib) {
   'use strict';
 
@@ -1440,6 +1562,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.editablepropnames = null;
     this.changeablepropnames = null;
     this.onCellValueChanger = this.onCellValueChanged.bind(this);
+    this.onRowValueChanger = this.onRowValueChanged.bind(this);
     this.dataOriginals = null;
     this.changedEditableCells = null;
     this.changedNonEditableCells = null;
@@ -1451,6 +1574,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.inBatchEdit = false;
     this.batchEditEvents = null;
     this.internalChange = false;
+    this.cellEditingStopped = false;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -1463,6 +1587,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       }
     }
     */
+    this.cellEditingStopped = null;
     this.internalChange = null;
     this.batchEditEvents = null;
     this.inBatchEdit = null;
@@ -1487,7 +1612,11 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   EditableAgGridMixin.prototype.makeUpRunTimeConfiguration = function (obj) {
     var aggrid, coldefs;
-    obj.onCellValueChanged = this.onCellValueChanger;
+    this.setAgGridHandler(obj, 'onCellValueChanged', this.onCellValueChanger);
+    this.setAgGridHandler(obj, 'onRowValueChanged', this.onRowValueChanger);
+    this.setAgGridHandler(obj, 'onCellKeyDown', this.onKeyDownForEdit.bind(this));
+    this.setAgGridHandler(obj, 'onCellEditingStopped', this.onCellEditingStopped.bind(this));
+    this.setAgGridHandler(obj, 'onSelectionChanged', this.onSelectionChangedForEdit.bind(this));
     aggrid = this.getConfigVal('aggrid');
     if (!aggrid) {
       return;
@@ -1499,6 +1628,8 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.editablepropnames = coldefs.reduce(editableChooser, []);
     this.changeablepropnames = this.editablepropnames.slice();
     this.trackablepropnames.forEach(checkTrackableInColDefs.bind(null, coldefs));
+    obj.enterNavigatesVertically=true;
+    obj.enterNavigatesVerticallyAfterEdit=true;
     lib.arryOperations.appendNonExistingItems(this.changeablepropnames, this.trackablepropnames);
     coldefs = null;
   };
@@ -1523,7 +1654,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
-    var rec, fieldname, editableedited, changed, changedcountdelta, newrow;
+    var rec, fieldname, editableedited, changed, changedcountdelta;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -1560,14 +1691,6 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (noChanged(params.data)) {
       params.data = this.dataOriginals.remove(params.rowIndex);
     }
-    if (outerlib.utils.blankRow.isEditFinished(params.data, this.getConfigVal('blankRow'))) {
-      newrow = outerlib.utils.blankRow.toRegular(params.data);
-      this.internalChange = true;
-      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
-      this.internalChange = false;
-      this.set('addedRowCount', this.get('addedRowCount')+1);
-      this.newRowAdded.fire(newrow);
-    }
     if (!this.inBatchEdit) {
         params.api.refreshCells();
     }
@@ -1587,6 +1710,30 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.set('changedCellCount', this.get('editedCellCount') + this.changedNonEditableCells.cellCount());
     this.set('editedRowsCount', this.dataOriginals.count);
     setChangedByUser.call(this);
+  };
+  EditableAgGridMixin.prototype.onRowValueChanged = function (params) {
+    console.log('onRowValueChanged', params);
+  };
+  EditableAgGridMixin.prototype.onKeyDownForEdit = function (params) {
+    var brconf
+    if (this.cellEditingStopped && params.event && params.event.key=='Enter') {
+      this.cellEditingStopped = false;
+      if (outerlib.utils.blankRow.is(params.data)) {
+        brconf = this.getConfigVal('blankRow');
+        if (outerlib.utils.blankRow.isEditFinished(params.data, brconf)) {
+          addNewRowFromBlank.call(this, brconf.create_new, params.data);
+          return;
+        }
+        console.log('time to empty all cells from blankRow');
+        outerlib.utils.blankRow.clearBlankRowNode(isEditableRelatedPropertyName, params.node);
+      }
+    }
+  };
+  EditableAgGridMixin.prototype.onCellEditingStopped = function (params) {
+    this.cellEditingStopped = true;
+  };
+  EditableAgGridMixin.prototype.onSelectionChangedForEdit = function (params) {
+    //console.log('onSelectionChangedForEdit', params);
   };
 
   EditableAgGridMixin.prototype.startBatchEdit = function () {
@@ -1921,6 +2068,10 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
       , 'onCellValueChanged'
+      , 'onRowValueChanged'
+      , 'onKeyDownForEdit'
+      , 'onCellEditingStopped'
+      , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      
       , 'revertAllEdits'
       , 'justUndoEdits'
@@ -1943,14 +2094,20 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   mylib.Editable = EditableAgGridMixin;
 
+  function isEditableRelatedPropertyName (name) {
+    if (name.substr(0, ChangedKeyPrefix.length) == ChangedKeyPrefix) {
+      return true;
+    }
+    if (name.substr(-ChangedKeySuffix.length) == ChangedKeySuffix) {
+      return true;
+    }
+    return false;
+  }
   function noChanged (record) {
     return !lib.traverseShallowConditionally(record, changedDetector);
   }
   function changedDetector (val, name) {
-    if (name.substr(0, ChangedKeyPrefix.length) != ChangedKeyPrefix) {
-      return;
-    }
-    if (name.substr(-ChangedKeySuffix.length) != ChangedKeySuffix) {
+    if (!isEditableRelatedPropertyName(name)) {
       return;
     }
     if (lib.isVal(val)) {
@@ -2034,6 +2191,16 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
 
   //static
+  function addNewRowFromBlank (create_new, row) {
+    var newrow = outerlib.utils.blankRow.toRegular(isEditableRelatedPropertyName, row);
+    if (create_new) {
+      this.internalChange = true;
+      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.internalChange = false;
+      this.set('addedRowCount', this.get('addedRowCount')+1);
+    }
+    this.newRowAdded.fire(newrow);
+  }
   function traverseOriginalsOrderly (cb) {
     var nodes = [], _nds = nodes, _cb = cb;
     this.dataOriginals.traverse(function (rec, index) {
@@ -2046,9 +2213,10 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     })
     _cb = null;
   }
+  //endof static
 }
 module.exports = addCellValueHandling;
-},{}],19:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 function createGridMixins (execlib, outerlib) {
   'use strict';
 
@@ -2060,7 +2228,7 @@ function createGridMixins (execlib, outerlib) {
   outerlib.gridmixins = mylib;
 }
 module.exports = createGridMixins;
-},{"./contextmenuablemixincreator":17,"./editablemixincreator":18}],20:[function(require,module,exports){
+},{"./contextmenuablemixincreator":19,"./editablemixincreator":20}],22:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
@@ -2075,11 +2243,12 @@ module.exports = createGridMixins;
   require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
   require('./elements')(execlib, mylib);
+  require('./fields')(execlib, mylib);
 
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./editors":5,"./elements":14,"./formatters":15,"./gridmixins":19,"./jobs":22,"./parsers":23,"./utils":27}],21:[function(require,module,exports){
+},{"./editors":5,"./elements":14,"./fields":16,"./formatters":17,"./gridmixins":21,"./jobs":24,"./parsers":25,"./utils":29}],23:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -2151,7 +2320,7 @@ function createCellUpdaterJob (execlib, mylib) {
   mylib.CellUpdater = CellUpdaterJob;
 }
 module.exports = createCellUpdaterJob;
-},{}],22:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 function createJobs (execlib) {
   'use strict';
 
@@ -2162,7 +2331,7 @@ function createJobs (execlib) {
   return mylib;
 }
 module.exports = createJobs;
-},{"./cellupdatercreator":21}],23:[function(require,module,exports){
+},{"./cellupdatercreator":23}],25:[function(require,module,exports){
 function createParsers (execlib, outerlib) {
   'use strict';
 
@@ -2177,7 +2346,7 @@ function createParsers (execlib, outerlib) {
 }
 module.exports = createParsers;
 
-},{"./numbercreator":24}],24:[function(require,module,exports){
+},{"./numbercreator":26}],26:[function(require,module,exports){
 function createNumberParsers (execlib, mylib) {
   'use strict';
 
@@ -2229,7 +2398,7 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}],25:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 function createBlankRowFunctionality (lib, mylib) {
   'use strict';
 
@@ -2248,35 +2417,67 @@ function createBlankRowFunctionality (lib, mylib) {
   }
   function isBlankRowEditFinished (row, options) {
     var ret = false;
-    if (!options) {
+    if (!(options && options.musthave)) {
       return false;
     }
     if (!isBlankRow(row)) {
       return false;
     }
-    if (lib.isArrayOfStrings(options)) {
-      ret = options.every(blankRowEditFinishedChecker.bind(null, row));
+    if (lib.isArrayOfStrings(options.musthave)) {
+      ret = options.musthave.every(blankRowEditFinishedChecker.bind(null, row));
       row = null;
       return ret;
     }
     return true;
   }
-  function toRegular (row) {
+  function filler (invalpropnamechecker, ret, val, key) {
+    if (key == __MAGICPROPERTYFORBLANKROW) {
+      return;
+    }
+    if (lib.isFunction(invalpropnamechecker) && invalpropnamechecker(key)) {
+      return;
+    }
+    ret[key] = val;
+  }
+  function toRegular (invalpropnamechecker, row) {
     if (!isBlankRow(row)) {
       return row;
     }
-    return lib.pickExcept(row, [__MAGICPROPERTYFORBLANKROW]);
+    var ret = {}, _r = ret;
+    lib.traverseShallow(row, filler.bind(null, invalpropnamechecker, _r));
+    _r = null;
+    return ret;
+  }
+  function emptier (invalpropnamechecker, rownode, val, key) {
+    if (key == __MAGICPROPERTYFORBLANKROW) {
+      return;
+    }
+    if (lib.isFunction(invalpropnamechecker) && invalpropnamechecker(key)) {
+      return;
+    }
+    try {
+      rownode.setDataValue(key, void 0);
+    } catch (e) {}
+  }
+  function clearBlankRowNode (invalpropnamechecker, rownode) {
+    if (!(rownode && rownode.data && isBlankRow(rownode.data))) {
+      return;
+    }
+    lib.traverseShallow(rownode.data, emptier.bind(null, invalpropnamechecker, rownode));
+    invalpropnamechecker = null;
+    rownode = null;
   }
 
   mylib.blankRow = {
     new: newBlankRow,
     is: isBlankRow,
     isEditFinished: isBlankRowEditFinished,
-    toRegular: toRegular
+    toRegular: toRegular,
+    clearBlankRowNode: clearBlankRowNode
   };
 }
 module.exports = createBlankRowFunctionality;
-},{}],26:[function(require,module,exports){
+},{}],28:[function(require,module,exports){
 function createColumnDefUtils (lib, outerlib) {
   'use strict';
 
@@ -2385,7 +2586,7 @@ function createColumnDefUtils (lib, outerlib) {
   outerlib.columnDef = mylib;
 }
 module.exports = createColumnDefUtils;
-},{}],27:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 function createUtils (lib) {
   'use strict';
 
@@ -2396,4 +2597,4 @@ function createUtils (lib) {
   return mylib;
 }
 module.exports = createUtils;
-},{"./blankrowfunctionalitycreator":25,"./columndefutilscreator":26}]},{},[20]);
+},{"./blankrowfunctionalitycreator":27,"./columndefutilscreator":28}]},{},[22]);

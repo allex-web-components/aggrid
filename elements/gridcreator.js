@@ -7,6 +7,7 @@ function createGrid (execlib, applib, mylib) {
 
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
+    this.optionLevelHandlers = new lib.Map();
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
@@ -16,10 +17,12 @@ function createGrid (execlib, applib, mylib) {
     this.rowUnselected = this.createBufferableHookCollection();
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
+    this.selectedRows = null;
   }
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.selectedRows = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
     }
@@ -49,6 +52,10 @@ function createGrid (execlib, applib, mylib) {
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
     }
+    if (this.optionLevelHandlers) {
+      this.optionLevelHandlers.destroy();
+    }
+    this.optionLevelHandlers = null;
     this.fullWidthRowManagers = null;
   };
   AgGridElement.prototype.doThejQueryCreation = function () {
@@ -212,8 +219,8 @@ function createGrid (execlib, applib, mylib) {
 
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
-    obj.onRowSelected = this.onAnySelection.bind(this, 'row');
-    obj.onRowUnselected = this.onAnySelection.bind(this, 'row');
+    this.setAgGridHandler(obj, 'onRowSelected', this.onAnySelection.bind(this, 'row'));
+    this.setAgGridHandler(obj, 'onRowUnselected', this.onAnySelection.bind(this, 'row'));
   };
   AgGridElement.prototype.onAgGridElementCreated = function () {
     this.set('data', this.getConfigVal('data'));
@@ -228,6 +235,11 @@ function createGrid (execlib, applib, mylib) {
       throw new lib.Error('NO_OPTIONS_AGGRID', 'options must have "aggrid" config object');
     }
     gridconf = options.aggrid;
+    this.setAgGridHandler(gridconf, 'onSelectionChanged', this.onSelectionChanged.bind(this));
+    if (options.blankRow) {
+      gridconf.rowSelection = gridconf.rowSelection || 'single';
+    }
+
     this.checkColumnDefs(gridconf.columnDefs);
     gridconf.rowData = gridconf.rowData || [];
     this.fullWidthRowManagers = fullWidthRowLib.createFullWidthRowManagers(this, options);
@@ -236,6 +248,17 @@ function createGrid (execlib, applib, mylib) {
       gridconf.fullWidthCellRenderer = this.fullWidthCellRenderer.bind(this);
     }
   };
+  function multiHandler (funcs, evnt) {
+    var i;
+    if (!lib.isArray(funcs)) {
+      return;
+    }
+    funcs.forEach(function (func) {if (lib.isFunction(func)) func(evnt);});
+  }
+  AgGridElement.prototype.setAgGridHandler = function (gridconf, name, handler) {
+    var h = gridconf[name];
+    gridconf[name] = multiHandler.bind(null, [h, handler]);
+  };
   AgGridElement.prototype.checkColumnDefs = function (columndefs) {
     if (!lib.isArray(columndefs)) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
@@ -243,6 +266,18 @@ function createGrid (execlib, applib, mylib) {
     if (!columndefs.every(isColumnOk)) {
       throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
+  };
+  AgGridElement.prototype.onSelectionChanged = function (evnt) {
+    if (!(evnt && evnt.api)) {
+      return;
+    }
+    var selnodes = evnt.api.getSelectedNodes();
+    var areselnodesarry = lib.isArray(selnodes);
+    var selnode = (areselnodesarry && selnodes.length>0) ? selnodes[selnodes.length-1] : null;
+    if  (selnode) {
+      console.log('selected node', selnode);
+    }
+    this.set('selectedRows', areselnodesarry ? selnodes.reduce(dataer, []) : []);
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
     var ret;
@@ -277,6 +312,12 @@ function createGrid (execlib, applib, mylib) {
     return -1;
   };
 
+  function dataer (res, node) {
+    if (node && node.data) {
+      res.push(node.data);
+    }
+    return res;
+  }
 
   function isColumnOk (obj) {
     var name, params, fmter, prser;
@@ -300,6 +341,8 @@ function createGrid (execlib, applib, mylib) {
     }
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
+
+
 
   applib.registerElementType('AgGrid', AgGridElement);
 

@@ -63,6 +63,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.editablepropnames = null;
     this.changeablepropnames = null;
     this.onCellValueChanger = this.onCellValueChanged.bind(this);
+    this.onRowValueChanger = this.onRowValueChanged.bind(this);
     this.dataOriginals = null;
     this.changedEditableCells = null;
     this.changedNonEditableCells = null;
@@ -74,6 +75,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.inBatchEdit = false;
     this.batchEditEvents = null;
     this.internalChange = false;
+    this.cellEditingStopped = false;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -86,6 +88,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       }
     }
     */
+    this.cellEditingStopped = null;
     this.internalChange = null;
     this.batchEditEvents = null;
     this.inBatchEdit = null;
@@ -110,7 +113,11 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   EditableAgGridMixin.prototype.makeUpRunTimeConfiguration = function (obj) {
     var aggrid, coldefs;
-    obj.onCellValueChanged = this.onCellValueChanger;
+    this.setAgGridHandler(obj, 'onCellValueChanged', this.onCellValueChanger);
+    this.setAgGridHandler(obj, 'onRowValueChanged', this.onRowValueChanger);
+    this.setAgGridHandler(obj, 'onCellKeyDown', this.onKeyDownForEdit.bind(this));
+    this.setAgGridHandler(obj, 'onCellEditingStopped', this.onCellEditingStopped.bind(this));
+    this.setAgGridHandler(obj, 'onSelectionChanged', this.onSelectionChangedForEdit.bind(this));
     aggrid = this.getConfigVal('aggrid');
     if (!aggrid) {
       return;
@@ -122,6 +129,8 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.editablepropnames = coldefs.reduce(editableChooser, []);
     this.changeablepropnames = this.editablepropnames.slice();
     this.trackablepropnames.forEach(checkTrackableInColDefs.bind(null, coldefs));
+    obj.enterNavigatesVertically=true;
+    obj.enterNavigatesVerticallyAfterEdit=true;
     lib.arryOperations.appendNonExistingItems(this.changeablepropnames, this.trackablepropnames);
     coldefs = null;
   };
@@ -146,7 +155,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
-    var rec, fieldname, editableedited, changed, changedcountdelta, newrow;
+    var rec, fieldname, editableedited, changed, changedcountdelta;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -183,14 +192,6 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (noChanged(params.data)) {
       params.data = this.dataOriginals.remove(params.rowIndex);
     }
-    if (outerlib.utils.blankRow.isEditFinished(params.data, this.getConfigVal('blankRow'))) {
-      newrow = outerlib.utils.blankRow.toRegular(params.data);
-      this.internalChange = true;
-      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
-      this.internalChange = false;
-      this.set('addedRowCount', this.get('addedRowCount')+1);
-      this.newRowAdded.fire(newrow);
-    }
     if (!this.inBatchEdit) {
         params.api.refreshCells();
     }
@@ -210,6 +211,30 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     this.set('changedCellCount', this.get('editedCellCount') + this.changedNonEditableCells.cellCount());
     this.set('editedRowsCount', this.dataOriginals.count);
     setChangedByUser.call(this);
+  };
+  EditableAgGridMixin.prototype.onRowValueChanged = function (params) {
+    console.log('onRowValueChanged', params);
+  };
+  EditableAgGridMixin.prototype.onKeyDownForEdit = function (params) {
+    var brconf
+    if (this.cellEditingStopped && params.event && params.event.key=='Enter') {
+      this.cellEditingStopped = false;
+      if (outerlib.utils.blankRow.is(params.data)) {
+        brconf = this.getConfigVal('blankRow');
+        if (outerlib.utils.blankRow.isEditFinished(params.data, brconf)) {
+          addNewRowFromBlank.call(this, brconf.create_new, params.data);
+          return;
+        }
+        console.log('time to empty all cells from blankRow');
+        outerlib.utils.blankRow.clearBlankRowNode(isEditableRelatedPropertyName, params.node);
+      }
+    }
+  };
+  EditableAgGridMixin.prototype.onCellEditingStopped = function (params) {
+    this.cellEditingStopped = true;
+  };
+  EditableAgGridMixin.prototype.onSelectionChangedForEdit = function (params) {
+    //console.log('onSelectionChangedForEdit', params);
   };
 
   EditableAgGridMixin.prototype.startBatchEdit = function () {
@@ -544,6 +569,10 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
       , 'onCellValueChanged'
+      , 'onRowValueChanged'
+      , 'onKeyDownForEdit'
+      , 'onCellEditingStopped'
+      , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      
       , 'revertAllEdits'
       , 'justUndoEdits'
@@ -566,14 +595,20 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   mylib.Editable = EditableAgGridMixin;
 
+  function isEditableRelatedPropertyName (name) {
+    if (name.substr(0, ChangedKeyPrefix.length) == ChangedKeyPrefix) {
+      return true;
+    }
+    if (name.substr(-ChangedKeySuffix.length) == ChangedKeySuffix) {
+      return true;
+    }
+    return false;
+  }
   function noChanged (record) {
     return !lib.traverseShallowConditionally(record, changedDetector);
   }
   function changedDetector (val, name) {
-    if (name.substr(0, ChangedKeyPrefix.length) != ChangedKeyPrefix) {
-      return;
-    }
-    if (name.substr(-ChangedKeySuffix.length) != ChangedKeySuffix) {
+    if (!isEditableRelatedPropertyName(name)) {
       return;
     }
     if (lib.isVal(val)) {
@@ -657,6 +692,16 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
 
   //static
+  function addNewRowFromBlank (create_new, row) {
+    var newrow = outerlib.utils.blankRow.toRegular(isEditableRelatedPropertyName, row);
+    if (create_new) {
+      this.internalChange = true;
+      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.internalChange = false;
+      this.set('addedRowCount', this.get('addedRowCount')+1);
+    }
+    this.newRowAdded.fire(newrow);
+  }
   function traverseOriginalsOrderly (cb) {
     var nodes = [], _nds = nodes, _cb = cb;
     this.dataOriginals.traverse(function (rec, index) {
@@ -669,5 +714,6 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     })
     _cb = null;
   }
+  //endof static
 }
 module.exports = addCellValueHandling;

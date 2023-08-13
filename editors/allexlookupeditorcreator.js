@@ -29,6 +29,11 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexLookupEditor.prototype.isPopup = function () {
     return true;
   };
+  AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    var el = panel.$element;
+    lib.runNext(el.trigger.bind(el, 'focus'));
+    el = null;
+  };
 
   mylib.AllexLookup = AllexLookupEditor;
 }

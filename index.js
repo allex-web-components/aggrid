@@ -12,6 +12,7 @@
   require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
   require('./elements')(execlib, mylib);
+  require('./fields')(execlib, mylib);
 
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);

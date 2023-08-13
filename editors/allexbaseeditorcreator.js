@@ -26,7 +26,7 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     this.initParams = null;
   };
   AllexBaseEditor.prototype.init = function (params) {
-    var parentel, pname;
+    var parentel, pname, paneldesc;
     this.initParams = params;
     pname = params.parentelementname;
     if (params.eGridCell) {
@@ -37,7 +37,11 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     if (pname) {
       parentel = applib.App.getElement('element.'+pname);
       if (parentel) {
-        this.panel = parentel.createElement(this.panelDescriptor(parentel));
+        paneldesc = this.panelDescriptor(parentel);
+        paneldesc.options = paneldesc.options || {};
+        paneldesc.options.onInitiallyLoaded = paneldesc.options.onInitiallyLoaded || [];
+        paneldesc.options.onInitiallyLoaded.push(this.onPanelInitiallyLoaded.bind(this));
+        this.panel = parentel.createElement(paneldesc);
       }
     }
   };
@@ -55,11 +59,15 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   };
   AllexBaseEditor.prototype.afterGuiAttached = function () {
     this.onResize();
+    if (this.isPopup()) {
+      this.panel.$element.parent().attr('tabIndex', -1);
+    }
   };
 
   AllexBaseEditor.prototype.onResize = function () {
+    var p;
     if (this.containerCell && this.panel && this.panel.$element) {
-      var p = this.isPopup() ? this.panel.$element.parent() : this.panel.$element;
+      p = this.isPopup() ? this.panel.$element.parent() : this.panel.$element;
       p.width(this.containerCell.clientWidth);
       p.height(this.containerCell.clientHeight);
     }
@@ -73,6 +81,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
 
   AllexBaseEditor.prototype.panelDescriptor = function (parentel) {
     throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement panelDescriptor');
+  };
+  AllexBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    var a = 5;
   };
 
   //statics

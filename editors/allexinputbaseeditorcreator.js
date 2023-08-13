@@ -81,7 +81,6 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     }
   }
 
-    
   applib.registerElementType('EditorInputHolder', EditorInputHolderElement);
 
   function AllexInputBaseEditor () {
@@ -118,6 +117,15 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   };
   AllexInputBaseEditor.prototype.isCancelAfterEnd = function () {
     return !this.valid;
+  };
+  AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    try {
+      var el = panel.getElement('Input').$element;
+      lib.runNext(el.trigger.bind(el, 'focus'));
+      el = null;
+    }catch(e){
+      console.error(e);
+    }
   };
   AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
     validationProc.call(this, this.initParams.validations, newval, oldval);
