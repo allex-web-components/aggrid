@@ -1,4 +1,4 @@
-function addCellValueHandling (execlib, outerlib, mylib) {
+function createEditableMixin (execlib, outerlib, mylib) {
   'use strict';
 
   var lib = execlib.lib;
@@ -156,6 +156,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
+    var isBlankRow;
+    var pk, pkfound, find4pk;
+    pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -173,12 +176,15 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     fieldname = params.colDef.field;
     editableedited = params.colDef && params.colDef.editable;
     rec = this.dataOriginals.get(params.rowIndex);
+    isBlankRow = params.node.isBlank;
+    params.isBlankRow = isBlankRow;
     if (!rec) {
       rec = lib.extendShallow({}, params.data);
       rec[fieldname] = params.oldValue;
       this.dataOriginals.add(params.rowIndex, rec);
     }
-    changed = params.data[fieldname]!==rec[fieldname];
+    changed = !isBlankRow && params.data[fieldname]!==rec[fieldname];
+    pkfound = changed && pk && fieldname==pk;
     this[editableedited ? 'changedEditableCells' : 'changedNonEditableCells'].check(params.rowIndex, fieldname, changed);
     changedcountdelta = changed ? 1 : -1;
     if (!(EditableEditedCountPropName in params.data)) {
@@ -191,6 +197,13 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     if (!ChangedKeyPrefix)
     if (noChanged(params.data)) {
       params.data = this.dataOriginals.remove(params.rowIndex);
+    }
+    if (pkfound) {
+      this.removeRow(rec, params.rowIndex);
+      find4pk = this.findRowIndexAndInsertIndexByPropVal(pk, params.data[pk]);
+      console.log(pk, params.data[pk], '=>', find4pk.insertafter);
+      console.log('onCellValueChanged inserting, synthetic', params.synthetic);
+      this.insertRow(params.data, find4pk.insertafter||0);
     }
     if (!this.inBatchEdit) {
         params.api.refreshCells();
@@ -219,15 +232,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     var brconf
     if (this.cellEditingStopped && params.event && params.event.key=='Enter') {
       this.cellEditingStopped = false;
-      if (outerlib.utils.blankRow.is(params.data)) {
-        brconf = this.getConfigVal('blankRow');
-        if (outerlib.utils.blankRow.isEditFinished(params.data, brconf)) {
-          addNewRowFromBlank.call(this, brconf.create_new, params.data);
-          return;
-        }
-        console.log('time to empty all cells from blankRow');
-        outerlib.utils.blankRow.clearBlankRowNode(isEditableRelatedPropertyName, params.node);
-      }
+      this.blankRowController.ifEditFinished(params.node, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
     }
   };
   EditableAgGridMixin.prototype.onCellEditingStopped = function (params) {
@@ -303,6 +308,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   };
   function editundoer (rec, originalrec) {
     var prop;
+    if (!(rec && originalrec)) {
+      return;
+    }
     for (prop in originalrec) {
       if (rec.hasOwnProperty(prop)) {
         rec[prop] = originalrec[prop];
@@ -451,7 +459,9 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   
   EditableAgGridMixin.prototype.updateRowSync = function (index, record) {
     var rownode, aggridopts, coldefs, oldrec, oldrec4update, prop, coldef;
-    rownode = this.rowNodeForIndex(index);
+    var pk, pkfound, find4pk;
+    pk = this.primaryKey;
+    rownode = this.rowNodeForIndexOrRecord(index, record);
     if (!rownode) {
       return;
     }
@@ -465,13 +475,15 @@ function addCellValueHandling (execlib, outerlib, mylib) {
     }
     oldrec = rownode.data;
     oldrec4update = lib.isFunction(oldrec.clone) ? oldrec.clone() : lib.extendShallow({}, oldrec);
-    this.data[index] = oldrec4update;
     for (prop in record) {
       if (!record.hasOwnProperty(prop)) {
         continue;
       }
       if (record[prop] === oldrec[prop]) {
         continue;
+      }
+      if (pk && pk == prop) {
+        pkfound = true;
       }
       coldef = outerlib.utils.columnDef.findRealColumnDefByFieldAndDeleteIt(coldefs, prop);
       if (!coldef){
@@ -480,6 +492,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       /**/
       oldrec4update[prop] = record[prop];
       this.onCellValueChanged ({
+        synthetic: true,
         oldValue: oldrec[prop],
         newValue: record[prop],
         colDef: coldef,
@@ -490,7 +503,45 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       });
       /**/
     }
-    rownode.setData(oldrec4update);
+    if (!pkfound) {
+      this.data[index] = oldrec4update;
+      rownode.setData(oldrec4update);
+    }
+  };
+  function secondHasTheSameValuesAsFirst (first, second) {
+    var fks = Object.keys(first);
+    return lib.isEqual(first, lib.pick(second, fks));
+  }
+  EditableAgGridMixin.prototype.updateRowByPropValSync = function (propname, propval, data) {
+    console.log('pre updateRowByPropValSync', this.get('data').slice());
+    var recNindex = this.findRowAndIndexByPropVal(propname, propval);
+    if (!(recNindex && recNindex.element)) {
+      return;
+    }
+    this.updateRowSync(
+      recNindex.index,
+      data
+    );
+  };
+  EditableAgGridMixin.prototype.upsertRowByPropValSync = function (propname, propval, data) {
+    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval);
+    if (!(recNindex && recNindex.element)) {
+      if (lib.isNumber(recNindex.insertafter)) {
+        this.insertRow(data, recNindex.insertafter);
+        if (this.blankRowController.hasPropertyValue(propname, propval)) {
+          this.blankRowController.emptyRow();
+        }
+      }
+      return;
+    }
+    if (secondHasTheSameValuesAsFirst(data, recNindex.element)) {
+      return;
+    }
+    this.updateRowSync(
+      recNindex.index,
+      data
+    );
+    this.refreshCells();
   };
 
   EditableAgGridMixin.prototype.updateConsecutiveRowsSync = function (rows, startindex, endindex, step, offset) {
@@ -512,7 +563,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
 
   EditableAgGridMixin.prototype.updateRow = function (index, record) {
     var rownode, ret;
-    rownode = this.rowNodeForIndex(index);
+    rownode = this.rowNodeForIndexOrRecord(index, record);
     if (!rownode) {
       return;
     }
@@ -586,6 +637,8 @@ function addCellValueHandling (execlib, outerlib, mylib) {
       , 'startBatchEdit'
       , 'endBatchEdit'
       , 'updateRowSync'
+      , 'updateRowByPropValSync'
+      , 'upsertRowByPropValSync'
       , 'updateConsecutiveRowsSync'
       , 'updateRow'
       , 'updateConsecutiveRows'
@@ -692,8 +745,7 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
 
   //static
-  function addNewRowFromBlank (create_new, row) {
-    var newrow = outerlib.utils.blankRow.toRegular(isEditableRelatedPropertyName, row);
+  function addNewRowFromBlank (create_new, newrow) {
     if (create_new) {
       this.internalChange = true;
       this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
@@ -716,4 +768,4 @@ function addCellValueHandling (execlib, outerlib, mylib) {
   }
   //endof static
 }
-module.exports = addCellValueHandling;
+module.exports = createEditableMixin;

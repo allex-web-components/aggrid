@@ -5,6 +5,9 @@ function createGrid (execlib, applib, mylib) {
     fullWidthRowLib = require('./fullwidthrowmanagers')(execlib, applib, mylib),
     WebElement = applib.getElementType('WebElement');
 
+  var lR = execlib.execSuite.libRegistry;
+  var arryopslib = lR.get('allex_arrayoperationslib');
+
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
     this.optionLevelHandlers = new lib.Map();
@@ -12,6 +15,7 @@ function createGrid (execlib, applib, mylib) {
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
     this.data = null;
+    this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
     this.rowSelected = this.createBufferableHookCollection();
     this.rowUnselected = this.createBufferableHookCollection();
@@ -43,6 +47,10 @@ function createGrid (execlib, applib, mylib) {
       this.selections.destroy();
     }
     this.selections = null;
+    if(this.blankRowController) {
+       this.blankRowController.destroy();
+    }
+    this.blankRowController = null;
     this.data = null;
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
@@ -86,9 +94,7 @@ function createGrid (execlib, applib, mylib) {
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
     }
-    if (this.getConfigVal('blankRow')) {
-      this.doApi('applyTransaction', {add: [mylib.utils.blankRow.new()]});
-    }
+    this.blankRowController.onSetData();
     this.refresh();
   };
   AgGridElement.prototype.get_pinnedBottom = function (datarecords) {
@@ -119,11 +125,60 @@ function createGrid (execlib, applib, mylib) {
     this.doApi('refreshHeader');
     //this.doColumnApi('autoSizeAllColumns');
   };
+  AgGridElement.prototype.refreshCells = function () {
+    this.doApi('refreshCells', {
+      suppressFlash: true
+    });
+  };
   AgGridElement.prototype.queueRefresh = function () {
     lib.runNext(this.refresh.bind(this), 100);
   };
+  AgGridElement.prototype.findRowAndIndexByPropVal = function (propname, propval) {
+    return arryopslib.findElementAndIndexWithProperty(this.get('data'), propname, propval);
+  };
+  AgGridElement.prototype.findRowIndexAndInsertIndexByPropVal = function (propname, propval) {
+    return arryopslib.findElementIndexAndInsertIndexWithProperty(this.get('data'), propname, propval);
+  };
   AgGridElement.prototype.addRow = function (rec) {
     this.set('data', (this.get('data')||[]).concat([rec||{}]));
+  };
+  AgGridElement.prototype.addRowSoft = function (rec) {
+    return this.doApi('applyTransaction', {add: [rec]}).add[0];
+  };
+  function logdata (caption, data) {
+    //console.log(caption, data.slice());
+  }
+  function emptyNodeFinder (node) {
+    console.log('emptyNodeFinder', node.rowIndex, node.data.index_id);
+  }
+  AgGridElement.prototype.insertRow = function (rec, afterindex) {
+    console.log('insertRow', afterindex);
+    var data;
+    logdata('preinsert', this.data);
+    data = (this.get('data')||[]).slice();
+    data.splice((afterindex||0)+1, 0, rec);
+    this.data = data;
+    this.blankRowController.prepareForInsert();
+    this.doApi('setRowData', data);
+    this.blankRowController.ackInsertedRow(rec);
+    this.refresh();
+    logdata('postinsert', this.data);
+    //lib.runNext(this.refresh.bind(this));
+  };
+  AgGridElement.prototype.removeRow = function (rec, atindex) {
+    logdata('preremove', this.data);
+    if (lib.isNumber(atindex)) {
+      (this.get('data')||[]).splice(atindex, 1);
+    }
+    this.doApi('applyTransaction', {remove: [rec]});
+    logdata('postremove', this.data);
+  };
+  AgGridElement.prototype.removeRowByPropValue = function (propname, propval) {
+    var recNindex = this.findRowAndIndexByPropVal(propname, propval);
+    if (!(recNindex && recNindex.element)) {
+      return;
+    }
+    this.removeRow(recNindex.element, recNindex.originalindex||recNindex.index);
   };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected', prevselected, aggridopts;
@@ -145,11 +200,27 @@ function createGrid (execlib, applib, mylib) {
     this[typename+suffix].fire(evntdata.data);
   };
 
-  AgGridElement.prototype.rowNodeForIndex = function (index) {
-    var model = this.doApi('getModel');
+  function nodeFinder(findobj, node) {
+    if (findobj.index == node.rowIndex) {
+      findobj.ret = node;
+    }
+  }
+  AgGridElement.prototype.rowNodeForIndexOrRecord = function (index, record) {
+    var model = this.doApi('getModel'), ret, findobj;
     if (!model) {
       return null;
     }
+    if (this.primaryKey) {
+      ret = model.getRowNode(record[this.primaryKey]);
+      if (ret) {
+        return ret;
+      }
+      findobj = {index: index, ret: null};
+      this.doApi('forEachNode', nodeFinder.bind(null, findobj));
+      ret = findobj.ret;
+      findobj = null;
+      return ret;
+  }
     return model.getRowNode(index);
   };
   AgGridElement.prototype.rowNodeForDataRow = function (row) {
@@ -157,8 +228,11 @@ function createGrid (execlib, applib, mylib) {
     if (!(lib.isArray(this.data) && this.data.length>0)) {
       return null;
     }
+    if (this.primaryKey) {
+      return this.rowNodeForIndexOrRecord(null, row);
+    }
     index = this.data.indexOf(row);
-    return index<0 ? null : this.rowNodeForIndex(index);
+    return index<0 ? null : this.rowNodeForIndexOrRecord(index);
   };
   AgGridElement.prototype.selectDataRow = function (row) {
     var node = this.rowNodeForDataRow(row);
@@ -360,10 +434,12 @@ function createGrid (execlib, applib, mylib) {
     AgGridElement.prototype.makeUpRunTimeConfiguration.call(this, obj);
     mylib.gridmixins.Editable.prototype.makeUpRunTimeConfiguration.call(this, obj);
   };
+  /*
   EditableAgGridElement.prototype.onAgGridElementCreated = function () {
       //this.getConfigVal('aggrid').api.addEventListener('cellValueChanged', this.onCellValueChanger);
     AgGridElement.prototype.onAgGridElementCreated.call(this);
   };
+  */
   EditableAgGridElement.prototype.set_data = function (data) {
     this.justUndoEdits();
     this.revertAllEdits();
@@ -371,5 +447,22 @@ function createGrid (execlib, applib, mylib) {
   };
 
   applib.registerElementType('EditableAgGrid', EditableAgGridElement);
+
+  function EditableTableAgGridElement (id, options) {
+    EditableAgGridElement.call(this, id, options);
+    mylib.gridmixins.Table.call(this, options);
+  }
+  lib.inherit(EditableTableAgGridElement, EditableAgGridElement);
+  mylib.gridmixins.Table.addMethods(EditableTableAgGridElement, EditableAgGridElement);
+  EditableTableAgGridElement.prototype.__cleanUp = function () {
+    mylib.gridmixins.Table.prototype.destroy.call(this);
+    EditableAgGridElement.prototype.__cleanUp.call(this);
+  };
+  EditableTableAgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
+    EditableAgGridElement.prototype.makeUpRunTimeConfiguration.call(this, obj);
+    mylib.gridmixins.Table.prototype.makeUpRunTimeConfiguration.call(this, obj);
+  };
+
+  applib.registerElementType('EditableTableAgGrid', EditableTableAgGridElement);
 }
 module.exports = createGrid;

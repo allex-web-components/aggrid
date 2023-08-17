@@ -128,6 +128,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     }
   };
   AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
+    this.valid = true;
     validationProc.call(this, this.initParams.validations, newval, oldval);
     if (!this.valid) {
       return;

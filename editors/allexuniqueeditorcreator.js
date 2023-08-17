@@ -32,6 +32,9 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     if (rowindex == index) {
       return true;
     }
+    if (row[pname]===val) {
+      var a = 5;
+    }
     return row[pname]!==val;
   }
 
