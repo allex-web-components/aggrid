@@ -229,7 +229,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     console.log('onRowValueChanged', params);
   };
   EditableAgGridMixin.prototype.onKeyDownForEdit = function (params) {
-    var brconf
     if (this.cellEditingStopped && params.event && params.event.key=='Enter') {
       this.cellEditingStopped = false;
       this.blankRowController.ifEditFinished(params.node, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
@@ -239,6 +238,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.cellEditingStopped = true;
   };
   EditableAgGridMixin.prototype.onSelectionChangedForEdit = function (params) {
+    if (this.cellEditingStopped) {
+      this.cellEditingStopped = false;
+      this.blankRowController.ifEditFinished(null, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
+    }
     //console.log('onSelectionChangedForEdit', params);
   };
 

@@ -1825,7 +1825,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     console.log('onRowValueChanged', params);
   };
   EditableAgGridMixin.prototype.onKeyDownForEdit = function (params) {
-    var brconf
     if (this.cellEditingStopped && params.event && params.event.key=='Enter') {
       this.cellEditingStopped = false;
       this.blankRowController.ifEditFinished(params.node, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
@@ -1835,6 +1834,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.cellEditingStopped = true;
   };
   EditableAgGridMixin.prototype.onSelectionChangedForEdit = function (params) {
+    if (this.cellEditingStopped) {
+      this.cellEditingStopped = false;
+      this.blankRowController.ifEditFinished(null, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
+    }
     //console.log('onSelectionChangedForEdit', params);
   };
 
@@ -2619,20 +2622,24 @@ function createBlankRowFunctionality (lib, mylib) {
   function blankRowEditFinishedChecker (row, prop) {
     return lib.isVal(row[prop]);
   }
-  function isBlankRowEditFinished (row, options) {
-    var ret = false;
-    if (!(options && options.musthave)) {
-      return false;
+  function isBlankRowEditFinished (row, options, schema) {
+    var ret = false, _r, schemaval;
+    if (!options) {
+      return;
     }
-    /*
-    if (!isBlankRow(row)) {
-      return false;
+    if (schema) {
+      schemaval = lib.jsonschema.validate(row, schema, {throwError: false});
+      if (schemaval.errors.length) {
+        return false;
+      }
     }
-    */
     if (lib.isArrayOfStrings(options.musthave)) {
-      ret = options.musthave.every(blankRowEditFinishedChecker.bind(null, row));
-      row = null;
-      return ret;
+      _r = row;
+      ret = options.musthave.every(blankRowEditFinishedChecker.bind(null, _r));
+      _r = null;
+      if (!ret) {
+        return ret;
+      }
     }
     return true;
   }
@@ -2670,14 +2677,39 @@ function createBlankRowFunctionality (lib, mylib) {
   function BlankRowController (grid, config) {
     this.grid = grid;
     this.config = config;
+    this.schema = null;
     this.rowNode = null;
     this.hadPreInsertIntervention = false;
+    this.buildSchema();
   }
   BlankRowController.prototype.destroy = function () {
     this.hadPreInsertIntervention = null;
     this.rowNode = null;
+    this.schema = null;
     this.config = null;
     this.grid = null;
+  };
+  function requiredpicker (arry, sch, fld) {
+    if (sch && sch.required) {
+      arry.push(fld);
+    }
+  }
+  BlankRowController.prototype.buildSchema = function () {
+    var reqarry, _reqarry;
+    if (!this.config) {
+      return;
+    }
+    if (this.config.mustmatch) {
+      reqarry = [];
+      _reqarry = reqarry;
+      lib.traverseShallow(this.config.mustmatch, requiredpicker.bind(null, _reqarry));
+      _reqarry = null;
+      this.schema = {
+        type: 'object',
+        properties: this.config.mustmatch,
+        required: reqarry
+      };
+    }
   };
   BlankRowController.prototype.onSetData = function () {
     if (!this.grid) return;
@@ -2689,10 +2721,14 @@ function createBlankRowFunctionality (lib, mylib) {
     return this.config && this.rowNode.data == row;
   };
   BlankRowController.prototype.ifEditFinished = function (rownode, invalpropnamechecker, func) {
+    if (!this.rowNode) {
+      return false;
+    }
+    rownode = rownode || this.rowNode;
     if (this.rowNode !== rownode) {
       return false;
     }
-    if (isBlankRowEditFinished(this.rowNode.data, this.config)) {
+    if (isBlankRowEditFinished(this.rowNode.data, this.config, this.schema)) {
       func(this.config.create_new, toRegular(invalpropnamechecker, this.rowNode.data));
       if (this.config.create_new) {
         this.emptyRow();
