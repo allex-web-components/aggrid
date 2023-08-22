@@ -751,7 +751,14 @@ function createEditableMixin (execlib, outerlib, mylib) {
   function addNewRowFromBlank (create_new, newrow) {
     if (create_new) {
       this.internalChange = true;
-      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.set(
+        'data', 
+        this.blankRowController.config.position=='bottom'
+        ?
+        this.get('data').slice().concat([newrow])
+        :
+        [newrow].concat(this.get('data'))
+      ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
     }

@@ -965,16 +965,9 @@ function createGrid (execlib, applib, mylib) {
   AgGridElement.prototype.addRowSoft = function (rec) {
     return this.doApi('applyTransaction', {add: [rec]}).add[0];
   };
-  function logdata (caption, data) {
-    //console.log(caption, data.slice());
-  }
-  function emptyNodeFinder (node) {
-    console.log('emptyNodeFinder', node.rowIndex, node.data.index_id);
-  }
   AgGridElement.prototype.insertRow = function (rec, afterindex) {
     console.log('insertRow', afterindex);
     var data;
-    logdata('preinsert', this.data);
     data = (this.get('data')||[]).slice();
     data.splice((afterindex||0)+1, 0, rec);
     this.data = data;
@@ -982,16 +975,13 @@ function createGrid (execlib, applib, mylib) {
     this.doApi('setRowData', data);
     this.blankRowController.ackInsertedRow(rec);
     this.refresh();
-    logdata('postinsert', this.data);
     //lib.runNext(this.refresh.bind(this));
   };
   AgGridElement.prototype.removeRow = function (rec, atindex) {
-    logdata('preremove', this.data);
     if (lib.isNumber(atindex)) {
       (this.get('data')||[]).splice(atindex, 1);
     }
     this.doApi('applyTransaction', {remove: [rec]});
-    logdata('postremove', this.data);
   };
   AgGridElement.prototype.removeRowByPropValue = function (propname, propval) {
     var recNindex = this.findRowAndIndexByPropVal(propname, propval);
@@ -999,6 +989,13 @@ function createGrid (execlib, applib, mylib) {
       return;
     }
     this.removeRow(recNindex.element, recNindex.originalindex||recNindex.index);
+  };
+  AgGridElement.prototype.removeRowPlain = function (rec) {
+    this.removeRow(rec, this.get('data').indexOf(rec));
+  };
+  AgGridElement.prototype.removeRowPlainLoud = function (rec) {
+    this.removeRow(rec, this.get('data').indexOf(rec));
+    this.set('data', this.get('data').slice());
   };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected', prevselected, aggridopts;
@@ -2347,7 +2344,14 @@ function createEditableMixin (execlib, outerlib, mylib) {
   function addNewRowFromBlank (create_new, newrow) {
     if (create_new) {
       this.internalChange = true;
-      this.set('data', [newrow].concat(this.get('data'))); //loud, with 'data' listeners being triggered
+      this.set(
+        'data', 
+        this.blankRowController.config.position=='bottom'
+        ?
+        this.get('data').slice().concat([newrow])
+        :
+        [newrow].concat(this.get('data'))
+      ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
     }
