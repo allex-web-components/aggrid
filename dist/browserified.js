@@ -306,7 +306,8 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
       default_markup: o(m.textinput
         , 'CLASS', 'form-control form-select'
         ),
-      value: this.initParams.value
+      value: this.initParams.value,
+      focusonnewoptions: true
     }, this.initParams.options);
 
     return {
@@ -1751,6 +1752,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
     var isBlankRow;
     var pk, pkfound, find4pk;
+    if (!this.cellEdited) {
+      return;
+    }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {

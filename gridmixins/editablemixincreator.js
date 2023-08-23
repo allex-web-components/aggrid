@@ -158,6 +158,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
     var isBlankRow;
     var pk, pkfound, find4pk;
+    if (!this.cellEdited) {
+      return;
+    }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;
     if (params.newValue === params.oldValue) {

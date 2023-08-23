@@ -17,7 +17,8 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
       default_markup: o(m.textinput
         , 'CLASS', 'form-control form-select'
         ),
-      value: this.initParams.value
+      value: this.initParams.value,
+      focusonnewoptions: true
     }, this.initParams.options);
 
     return {
