@@ -2358,9 +2358,16 @@ function createEditableMixin (execlib, outerlib, mylib) {
       ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
+      this.blankRowController.startEditing();
+      //lib.runNext(startEditingCell.bind(this));
     }
     this.newRowAdded.fire(newrow);
   }
+  /*
+  function startEditingCell () {
+    this.blankRowController.startEditing();
+  }
+  */
   function traverseOriginalsOrderly (cb) {
     var nodes = [], _nds = nodes, _cb = cb;
     this.dataOriginals.traverse(function (rec, index) {
@@ -2784,6 +2791,15 @@ function createBlankRowFunctionality (lib, mylib) {
     if (!this.grid) return;
     this.rowNode.setData({});
   };
+  BlankRowController.prototype.startEditing = function () {
+    if (!(this.grid && this.rowNode)) {
+      return;
+    }
+    this.grid.doApi('startEditingCell', {
+      rowIndex: this.rowNode.childIndex, 
+      colKey: this.grid.editablepropnames[0]
+    });
+  }
   mylib.BlankRowController = BlankRowController;
 }
 module.exports = createBlankRowFunctionality;

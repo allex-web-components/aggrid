@@ -764,9 +764,16 @@ function createEditableMixin (execlib, outerlib, mylib) {
       ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
+      this.blankRowController.startEditing();
+      //lib.runNext(startEditingCell.bind(this));
     }
     this.newRowAdded.fire(newrow);
   }
+  /*
+  function startEditingCell () {
+    this.blankRowController.startEditing();
+  }
+  */
   function traverseOriginalsOrderly (cb) {
     var nodes = [], _nds = nodes, _cb = cb;
     this.dataOriginals.traverse(function (rec, index) {

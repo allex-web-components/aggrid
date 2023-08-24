@@ -159,6 +159,15 @@ function createBlankRowFunctionality (lib, mylib) {
     if (!this.grid) return;
     this.rowNode.setData({});
   };
+  BlankRowController.prototype.startEditing = function () {
+    if (!(this.grid && this.rowNode)) {
+      return;
+    }
+    this.grid.doApi('startEditingCell', {
+      rowIndex: this.rowNode.childIndex, 
+      colKey: this.grid.editablepropnames[0]
+    });
+  }
   mylib.BlankRowController = BlankRowController;
 }
 module.exports = createBlankRowFunctionality;
