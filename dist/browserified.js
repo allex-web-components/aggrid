@@ -906,7 +906,8 @@ function createGrid (execlib, applib, mylib) {
     }
   };
   AgGridElement.prototype.set_data = function (data) {
-    var edits = this.doApi('getEditingCells');
+    var edits = this.lastEditedCellsBeforeSetData || this.doApi('getEditingCells');
+    var checkedits;
     this.data = data;
     this.__children.traverse(function (chld) {
       chld.destroy();
@@ -919,6 +920,8 @@ function createGrid (execlib, applib, mylib) {
     this.refresh();
     if (edits && edits.length>0) {
       edits.forEach(editStarter.bind(this));
+      checkedits = this.doApi('getEditingCells');
+      this.lastEditedCellsBeforeSetData = (edits.length != checkedits.length) ? edits : null;
     }
   };
   //static
@@ -1682,6 +1685,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.batchEditEvents = null;
     this.internalChange = false;
     this.cellEditingStopped = false;
+    this.lastEditedCellsBeforeSetData = null;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -1694,6 +1698,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       }
     }
     */
+    this.lastEditedCellsBeforeSetData = null;
     this.cellEditingStopped = null;
     this.internalChange = null;
     this.batchEditEvents = null;
@@ -1722,6 +1727,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.setAgGridHandler(obj, 'onCellValueChanged', this.onCellValueChanger);
     this.setAgGridHandler(obj, 'onRowValueChanged', this.onRowValueChanger);
     this.setAgGridHandler(obj, 'onCellKeyDown', this.onKeyDownForEdit.bind(this));
+    this.setAgGridHandler(obj, 'onCellEditingStarted', this.onCellEditingStarted.bind(this));
     this.setAgGridHandler(obj, 'onCellEditingStopped', this.onCellEditingStopped.bind(this));
     this.setAgGridHandler(obj, 'onSelectionChanged', this.onSelectionChangedForEdit.bind(this));
     aggrid = this.getConfigVal('aggrid');
@@ -1842,6 +1848,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
       this.cellEditingStopped = false;
       this.blankRowController.ifEditFinished(params.node, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
     }
+  };
+  EditableAgGridMixin.prototype.onCellEditingStarted = function (params) {
+    this.lastEditedCellsBeforeSetData = null;
   };
   EditableAgGridMixin.prototype.onCellEditingStopped = function (params) {
     this.cellEditingStopped = true;
@@ -2234,6 +2243,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'onCellValueChanged'
       , 'onRowValueChanged'
       , 'onKeyDownForEdit'
+      , 'onCellEditingStarted'
       , 'onCellEditingStopped'
       , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      

@@ -85,7 +85,8 @@ function createGrid (execlib, applib, mylib) {
     }
   };
   AgGridElement.prototype.set_data = function (data) {
-    var edits = this.doApi('getEditingCells');
+    var edits = this.lastEditedCellsBeforeSetData || this.doApi('getEditingCells');
+    var checkedits;
     this.data = data;
     this.__children.traverse(function (chld) {
       chld.destroy();
@@ -98,6 +99,8 @@ function createGrid (execlib, applib, mylib) {
     this.refresh();
     if (edits && edits.length>0) {
       edits.forEach(editStarter.bind(this));
+      checkedits = this.doApi('getEditingCells');
+      this.lastEditedCellsBeforeSetData = (edits.length != checkedits.length) ? edits : null;
     }
   };
   //static
