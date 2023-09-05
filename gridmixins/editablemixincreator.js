@@ -207,9 +207,11 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (pkfound) {
       this.removeRow(rec, params.rowIndex);
       find4pk = this.findRowIndexAndInsertIndexByPropVal(pk, params.data[pk]);
-      console.log(pk, params.data[pk], '=>', find4pk.insertafter);
-      console.log('onCellValueChanged inserting, synthetic', params.synthetic);
-      this.insertRow(params.data, find4pk.insertafter||0);
+      if (find4pk) {
+        console.log(pk, params.data[pk], '=>', find4pk.insertafter);
+        console.log('onCellValueChanged inserting, synthetic', params.synthetic);
+        this.insertRow(params.data, find4pk.insertafter||0);
+      }
     }
     if (!this.inBatchEdit) {
         params.api.refreshCells();
