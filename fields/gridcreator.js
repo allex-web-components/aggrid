@@ -20,6 +20,9 @@ function createGridFields (execlib, lR, mylib) {
     EditableAgGridElement.prototype.__cleanUp.call(this);
   };
   EditableAgGridFieldElement.prototype.set_data = function (data) { //redefine it even further
+    if (lib.isArray(data)) { //thin assumption that data in FormAPI (if isVal) is always a hash
+      return this.set_rows(data);
+    }
     var ret = FieldBaseMixin.prototype.set_data.call(this, data);
     this.doPropertyFromHash(data, 'rows');
     return ret;
@@ -30,7 +33,11 @@ function createGridFields (execlib, lR, mylib) {
   };
   */
   EditableAgGridFieldElement.prototype.set_rows = function (rows) {
-    return EditableAgGridElement.prototype.set_data.call(this, rows);
+    var ret = EditableAgGridElement.prototype.set_data.call(this, rows);
+    if (ret) {
+      this.changed.fire('value', this.data);
+    }
+    return ret;
   };
   EditableAgGridFieldElement.prototype.get_value = function () {
     return this.data;
