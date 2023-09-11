@@ -1168,8 +1168,15 @@ function createGrid (execlib, applib, mylib) {
     funcs.forEach(function (func) {if (lib.isFunction(func)) func(evnt);});
   }
   AgGridElement.prototype.setAgGridHandler = function (gridconf, name, handler) {
-    var h = gridconf[name];
-    gridconf[name] = multiHandler.bind(null, [h, handler]);
+    var h = this.optionLevelHandlers.get(name);
+    if (!h) {
+      h = [];
+      this.optionLevelHandlers.add(name, h);
+    }
+    h.push(handler);
+    if (!gridconf[name]) {
+      gridconf[name] = multiHandler.bind(null, h);
+    }
   };
   AgGridElement.prototype.checkColumnDefs = function (columndefs) {
     if (!lib.isArray(columndefs)) {
