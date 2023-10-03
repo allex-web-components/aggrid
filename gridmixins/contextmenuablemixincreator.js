@@ -50,7 +50,8 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   MenuHolder.prototype.showFromEvent = function (evnt) {
     this.menu.css({
       left: evnt.pageX+'px',
-      top: evnt.pageY+'px'
+      top: evnt.pageY+'px',
+      'z-index': 5000
     });
     this.menu.show();
     evnt.preventDefault();
@@ -107,8 +108,9 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     }
     item = this.items[index];
     if (lib.isFunction(item.action)) {
-      item.action();
+      lib.runNext(item.action.bind(item));      
     }
+    item = null;
   };
 
   function ContextMenuableAgGridMixin (options) {
