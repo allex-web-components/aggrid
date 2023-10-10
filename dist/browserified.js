@@ -64,6 +64,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
       this.panel.$element.parent().attr('tabIndex', -1);
     }
   };
+  AllexBaseEditor.prototype.matchesRowAndColumnNames = function (row, colnames) {
+    return this.initParams && this.initParams.rowIndex == row && colnames.indexOf(this.initParams.column.colId)>=0;
+  };
 
   AllexBaseEditor.prototype.onResize = function () {
     var p;
@@ -75,6 +78,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   };
   AllexBaseEditor.prototype.editValueOfPanel = function () {
     return this.panel.get('value');
+  };
+  AllexBaseEditor.prototype.setEditValueFromRecord = function (rec) {
+    return this.panel.set('value', rec[this.initParams.column.colId]);
   };
   AllexBaseEditor.prototype.getOtherPropsAndValuesToChangeAfterSelfEdit = function () {
     return null;
@@ -223,9 +229,6 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   };
   AllexInputBaseEditor.prototype.isPopup = function () {
     return false;
-  };
-  AllexInputBaseEditor.prototype.editValueOfPanel = function () {
-    return this.panel.get('value');
   };
   AllexInputBaseEditor.prototype.afterGuiAttached = function () {
     this.panel.attachListener('changed', 'value', this.onValueChanged.bind(this));
@@ -2439,7 +2442,11 @@ function createEditableMixin (execlib, outerlib, mylib) {
     var editor = editorWithin.call(this, rec);
     lib.traverseShallow(rec, dataSetter.bind(this));
     if (editor) {
-      editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
+      if (lib.isFunction(editor.setEditValueFromRecord)) {
+        editor.setEditValueFromRecord(rec);
+      } else {
+        editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
+      }
     }
   }
   function dataSetter (val, key) {
@@ -2456,7 +2463,14 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return ret;
   }
   function isContainedInEditedCell (findobj, editor) {
-    if (findobj.row == editor.params.rowIndex && findobj.propnames.indexOf(editor.params.column.colId)>=0) {
+    if (!editor) {return;}
+    var isfound = (lib.isFunction(editor.matchesRowAndColumnNames)
+    ?
+    editor.matchesRowAndColumnNames(findobj.row, findobj.propnames)
+    :
+    findobj.row == editor.params.rowIndex && findobj.propnames.indexOf(editor.params.column.colId)>=0
+    );
+    if (isfound) {
       findobj.res = editor;
       return true;
     }

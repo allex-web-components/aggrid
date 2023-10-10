@@ -805,7 +805,11 @@ function createEditableMixin (execlib, outerlib, mylib) {
     var editor = editorWithin.call(this, rec);
     lib.traverseShallow(rec, dataSetter.bind(this));
     if (editor) {
-      editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
+      if (lib.isFunction(editor.setEditValueFromRecord)) {
+        editor.setEditValueFromRecord(rec);
+      } else {
+        editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
+      }
     }
   }
   function dataSetter (val, key) {
@@ -822,7 +826,14 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return ret;
   }
   function isContainedInEditedCell (findobj, editor) {
-    if (findobj.row == editor.params.rowIndex && findobj.propnames.indexOf(editor.params.column.colId)>=0) {
+    if (!editor) {return;}
+    var isfound = (lib.isFunction(editor.matchesRowAndColumnNames)
+    ?
+    editor.matchesRowAndColumnNames(findobj.row, findobj.propnames)
+    :
+    findobj.row == editor.params.rowIndex && findobj.propnames.indexOf(editor.params.column.colId)>=0
+    );
+    if (isfound) {
       findobj.res = editor;
       return true;
     }

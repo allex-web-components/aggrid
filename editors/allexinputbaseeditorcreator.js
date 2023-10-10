@@ -108,9 +108,6 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexInputBaseEditor.prototype.isPopup = function () {
     return false;
   };
-  AllexInputBaseEditor.prototype.editValueOfPanel = function () {
-    return this.panel.get('value');
-  };
   AllexInputBaseEditor.prototype.afterGuiAttached = function () {
     this.panel.attachListener('changed', 'value', this.onValueChanged.bind(this));
     Base.prototype.afterGuiAttached.call(this);

@@ -63,6 +63,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
       this.panel.$element.parent().attr('tabIndex', -1);
     }
   };
+  AllexBaseEditor.prototype.matchesRowAndColumnNames = function (row, colnames) {
+    return this.initParams && this.initParams.rowIndex == row && colnames.indexOf(this.initParams.column.colId)>=0;
+  };
 
   AllexBaseEditor.prototype.onResize = function () {
     var p;
@@ -74,6 +77,9 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   };
   AllexBaseEditor.prototype.editValueOfPanel = function () {
     return this.panel.get('value');
+  };
+  AllexBaseEditor.prototype.setEditValueFromRecord = function (rec) {
+    return this.panel.set('value', rec[this.initParams.column.colId]);
   };
   AllexBaseEditor.prototype.getOtherPropsAndValuesToChangeAfterSelfEdit = function () {
     return null;
