@@ -22,7 +22,6 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   }
   lib.inherit(EditorInputHolderElement, WebElement);
   EditorInputHolderElement.prototype.__cleanUp = function () {
-    console.log(this.constructor.name, 'destroying');
     this.value = null;
     WebElement.prototype.__cleanUp.call(this);
   };
