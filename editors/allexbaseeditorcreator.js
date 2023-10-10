@@ -8,6 +8,7 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   function AllexBaseEditor () {
     this.initParams = null;
     this.containerCell = null;
+    this.panelLoaded = null;
     this.panel = null;
     this.resizeListener = this.onResize.bind(this);
     this.resizeObserver = null;
@@ -19,16 +20,20 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     }
     this.resizeListener = null;
     if (this.panel) {
-      this.panel.destroy();
+      if (this.panelLoaded) {
+        this.panel.destroy();
+      }
     }
     this.panel = null;
+    this.panelLoaded = null;
     this.containerCell = null;
     this.initParams = null;
   };
   AllexBaseEditor.prototype.init = function (params) {
-    var parentel, pname, paneldesc;
+    var parentel, pname, paneldesc;    
     this.initParams = params;
     pname = params.parentelementname;
+    this.panelLoaded = false;
     if (params.eGridCell) {
       this.containerCell = params.eGridCell;
       this.resizeObserver = new ResizeObserver(this.resizeListener);
@@ -89,7 +94,12 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement panelDescriptor');
   };
   AllexBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
-    var a = 5;
+    if (this.panelLoaded==null) {
+      //I'm destroyed, so destroy panel as well
+      panel.destroy();
+      return;
+    }
+    this.panelLoaded = true;
   };
 
   //statics

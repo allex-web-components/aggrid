@@ -9,6 +9,7 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
   function AllexBaseEditor () {
     this.initParams = null;
     this.containerCell = null;
+    this.panelLoaded = null;
     this.panel = null;
     this.resizeListener = this.onResize.bind(this);
     this.resizeObserver = null;
@@ -20,16 +21,20 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     }
     this.resizeListener = null;
     if (this.panel) {
-      this.panel.destroy();
+      if (this.panelLoaded) {
+        this.panel.destroy();
+      }
     }
     this.panel = null;
+    this.panelLoaded = null;
     this.containerCell = null;
     this.initParams = null;
   };
   AllexBaseEditor.prototype.init = function (params) {
-    var parentel, pname, paneldesc;
+    var parentel, pname, paneldesc;    
     this.initParams = params;
     pname = params.parentelementname;
+    this.panelLoaded = false;
     if (params.eGridCell) {
       this.containerCell = params.eGridCell;
       this.resizeObserver = new ResizeObserver(this.resizeListener);
@@ -90,7 +95,12 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement panelDescriptor');
   };
   AllexBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
-    var a = 5;
+    if (this.panelLoaded==null) {
+      //I'm destroyed, so destroy panel as well
+      panel.destroy();
+      return;
+    }
+    this.panelLoaded = true;
   };
 
   //statics
@@ -144,6 +154,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   }
   lib.inherit(EditorInputHolderElement, WebElement);
   EditorInputHolderElement.prototype.__cleanUp = function () {
+    console.log(this.constructor.name, 'destroying');
     this.value = null;
     WebElement.prototype.__cleanUp.call(this);
   };
@@ -238,6 +249,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     return !this.valid;
   };
   AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     try {
       var el = panel.getElement('Input').$element;
       lib.runNext(el.trigger.bind(el, 'focus'));
@@ -323,6 +335,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
     return true;
   };
   AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     var el = panel.$element;
     lib.runNext(el.trigger.bind(el, 'focus'));
     el = null;
@@ -934,6 +947,11 @@ function createGrid (execlib, applib, mylib) {
   };
   //static
   function editStarter(cellposition) {
+    if ((this.get('data')||[]).length<=cellposition.rowIndex) {
+      console.log('startEditingCell skipped on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
+      return;
+    }
+    console.log('startEditingCell on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
     this.doApi('startEditingCell', {
       rowIndex: cellposition.rowIndex,
       colKey: cellposition.column,
@@ -1942,6 +1960,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       return;
     }
+    this.doApi('stopEditing');
     if (lib.isArray(this.get('data'))) {
       data = this.get('data').slice();
       this.dataOriginals.traverse(function (val, recindex) {
@@ -1978,7 +1997,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
     if (!this.dataOriginals) {
       return;
-    }
+    }    
     if (lib.isArray(this.data)) {
       data = this.data;
       this.dataOriginals.traverse(function (val, recindex) {

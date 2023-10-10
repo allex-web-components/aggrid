@@ -22,6 +22,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   }
   lib.inherit(EditorInputHolderElement, WebElement);
   EditorInputHolderElement.prototype.__cleanUp = function () {
+    console.log(this.constructor.name, 'destroying');
     this.value = null;
     WebElement.prototype.__cleanUp.call(this);
   };
@@ -116,6 +117,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     return !this.valid;
   };
   AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     try {
       var el = panel.getElement('Input').$element;
       lib.runNext(el.trigger.bind(el, 'focus'));

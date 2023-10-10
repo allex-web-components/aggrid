@@ -110,6 +110,11 @@ function createGrid (execlib, applib, mylib) {
   };
   //static
   function editStarter(cellposition) {
+    if ((this.get('data')||[]).length<=cellposition.rowIndex) {
+      console.log('startEditingCell skipped on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
+      return;
+    }
+    console.log('startEditingCell on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
     this.doApi('startEditingCell', {
       rowIndex: cellposition.rowIndex,
       colKey: cellposition.column,

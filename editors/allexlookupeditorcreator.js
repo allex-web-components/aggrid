@@ -31,6 +31,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
     return true;
   };
   AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
+    Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     var el = panel.$element;
     lib.runNext(el.trigger.bind(el, 'focus'));
     el = null;

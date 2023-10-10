@@ -305,6 +305,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!this.dataOriginals) {
       return;
     }
+    this.doApi('stopEditing');
     if (lib.isArray(this.get('data'))) {
       data = this.get('data').slice();
       this.dataOriginals.traverse(function (val, recindex) {
@@ -341,7 +342,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
     if (!this.dataOriginals) {
       return;
-    }
+    }    
     if (lib.isArray(this.data)) {
       data = this.data;
       this.dataOriginals.traverse(function (val, recindex) {
