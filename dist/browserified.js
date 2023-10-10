@@ -1800,8 +1800,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;
+    params.setValues = setValues.bind(params);
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
+      params = null;
       return;
     }
     if (!this.dataOriginals) {
@@ -1860,6 +1862,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
         :
         0
       )
+      params = null;
       return;
     }
     this.set('editedCellCount', this.changedEditableCells.cellCount());
@@ -2430,6 +2433,36 @@ function createEditableMixin (execlib, outerlib, mylib) {
     _cb = null;
   }
   //endof static
+
+  //setValues on editobj
+  function setValues (rec) {
+    var editor = editorWithin.call(this, rec);
+    lib.traverseShallow(rec, dataSetter.bind(this));
+    if (editor) {
+      editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
+    }
+    editobj = null;
+  }
+  function dataSetter (val, key) {
+    this.data[key] = val;
+    this.node.setDataValue(key, val);
+  }
+  function editorWithin (rec) {
+    var editors = this.api.getCellEditorInstances();
+    var findobj = {row: this.rowIndex, propnames: Object.keys(rec), res: null};
+    var ret;
+    editors.some(isContainedInEditedCell.bind(null, findobj));
+    ret = findobj.res;
+    findobj = null;
+    return ret;
+  }
+  function isContainedInEditedCell (findobj, editor) {
+    if (findobj.row == editor.params.rowIndex && findobj.propnames.indexOf(editor.params.column.colId)>=0) {
+      findobj.res = editor;
+      return true;
+    }
+  }
+  //endof setValues on editobj
 }
 module.exports = createEditableMixin;
 },{}],21:[function(require,module,exports){
