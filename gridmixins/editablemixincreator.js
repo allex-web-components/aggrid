@@ -807,7 +807,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (editor) {
       editor.cellEditorInput.eInput.setValue(rec[editor.params.column.colId]);
     }
-    editobj = null;
   }
   function dataSetter (val, key) {
     this.data[key] = val;
