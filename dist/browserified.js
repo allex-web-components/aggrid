@@ -1591,10 +1591,19 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     }
     item = this.items[index];
     if (lib.isFunction(item.action)) {
-      lib.runNext(item.action.bind(item));      
+      lib.runNext(itemActioner.bind(null, item));
+      //lib.runNext(item.action.bind(item));
     }
     item = null;
   };
+
+  function itemActioner (item) {
+    try {
+      item.action();
+    } catch (e) {
+      console.error('Error in running AgGrid ContextMenu action', e);
+    }
+  }
 
   function ContextMenuableAgGridMixin (options) {
     this.ctxMenuDescriptor = (options && options.contextmenu) ? options.contextmenu.items : null;
