@@ -14,7 +14,7 @@ function createGrid (execlib, applib, mylib) {
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
-    this.data = null;
+    this.data = [];
     this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
     this.rowSelected = this.createBufferableHookCollection();
