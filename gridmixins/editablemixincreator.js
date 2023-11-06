@@ -32,14 +32,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
       return false;
   };
   ChangedCells.prototype.cellCount = function () {
-    var cntobj = {cnt: 0}, ret;
-    this.traverse(cellcounter.bind(null, cntobj));
-    ret = cntobj.cnt;
-    cntobj = null;
-    return ret;
+    return this.reduce(cellcounter, 0);
   };
-  function cellcounter (cntobj, cells, rowindex) {
-    cntobj.cnt += cells.length;
+  function cellcounter (res, cells, rowindex) {
+    return res + cells.length;
   };
 
   var ChangedKeyPrefix = 'allexAgGrid_',
