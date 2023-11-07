@@ -17,6 +17,7 @@ function createGrid (execlib, applib, mylib) {
     this.data = [];
     this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
+    this.rowDblClicked = this.createBufferableHookCollection();
     this.rowSelected = this.createBufferableHookCollection();
     this.rowUnselected = this.createBufferableHookCollection();
     this.masterRowExpanding = this.createBufferableHookCollection();
@@ -43,6 +44,10 @@ function createGrid (execlib, applib, mylib) {
       this.rowSelected.destroy();
     }
     this.rowSelected = null;
+    if(this.rowDblClicked) {
+       this.rowDblClicked.destroy();
+    }
+    this.rowDblClicked = null;
     if (this.selections) {
       this.selections.destroy();
     }
@@ -202,6 +207,9 @@ function createGrid (execlib, applib, mylib) {
     this.removeRow(rec, this.get('data').indexOf(rec));
     this.set('data', this.get('data').slice());
   };
+  AgGridElement.prototype.onGridRowDblClicked = function (evntdata) {
+    this.rowDblClicked.fire(evntdata);
+  };
   AgGridElement.prototype.onAnySelection = function (typename, evntdata) {
     var selected = evntdata.node.selected, suffix = selected ? 'Selected' : 'Unselected', prevselected, aggridopts;
     if (selected) {
@@ -315,6 +323,7 @@ function createGrid (execlib, applib, mylib) {
 
 
   AgGridElement.prototype.makeUpRunTimeConfiguration = function (obj) {
+    this.setAgGridHandler(obj, 'onRowDoubleClicked', this.onGridRowDblClicked.bind(this));
     this.setAgGridHandler(obj, 'onRowSelected', this.onAnySelection.bind(this, 'row'));
     this.setAgGridHandler(obj, 'onRowUnselected', this.onAnySelection.bind(this, 'row'));
   };
