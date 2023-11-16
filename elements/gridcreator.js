@@ -96,12 +96,14 @@ function createGrid (execlib, applib, mylib) {
       */
     }
   };
+  /*
   function freezer (obj) {
     return lib.pickExcept(obj, []);
   }
   function frozenarry (arry) {
     return lib.isArray(arry) ? arry.map(freezer) : arry;
   }
+  */
   AgGridElement.prototype.set_data = function (data) {
     var edits, checkedits;
     if (data == this.data) {
@@ -496,9 +498,7 @@ function createGrid (execlib, applib, mylib) {
   */
   EditableAgGridElement.prototype.set_data = function (data) {
     this.justUndoEdits();
-    console.log('before justRevertAllEdits', frozenarry(data));
     this.justRevertAllEdits();
-    console.log('after justRevertAllEdits', frozenarry(data));
     return AgGridElement.prototype.set_data.call(this, data);
   };
 
