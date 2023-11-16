@@ -118,7 +118,10 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
     Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     try {
-      var el = panel.getElement('Input').$element;
+      var el = panel.$element ? panel.$element.find('input').filter(':visible:first') : null;
+      if (!(el && el.length>0)) {
+        return;
+      }
       lib.runNext(el.trigger.bind(el, 'focus'));
       el = null;
     }catch(e){

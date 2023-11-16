@@ -73,6 +73,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.internalChange = false;
     this.cellEditingStopped = false;
     this.lastEditedCellsBeforeSetData = null;
+    this.pristineData = null;
+    this.addedRowAtIndex = null;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -85,6 +87,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
       }
     }
     */
+    this.addedRowAtIndex = null;
+    this.pristineData = null;
     this.lastEditedCellsBeforeSetData = null;
     this.cellEditingStopped = null;
     this.internalChange = null;
@@ -151,7 +155,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
   }
 
-
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
@@ -161,7 +164,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       return;
     }
     pk = this.primaryKey;
-    params.inBatchEdit = this.inBatchEdit;
+    params.inBatchEdit = this.inBatchEdit;    
     params.setValues = setValues.bind(params);
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -294,14 +297,27 @@ function createEditableMixin (execlib, outerlib, mylib) {
   };
 
   EditableAgGridMixin.prototype.revertAllEdits = function () {
+    var pdata;
+    this.justRevertAllEdits();
+    pdata = this.pristineData;
+    this.pristineData = null;
+    if (pdata) {
+      console.log('setting pristine data', pdata);
+      this.set('data', pdata);
+    }
+    this.set('addedRowCount', 0);
+    this.set('changedByUser', false);
+  };
+  EditableAgGridMixin.prototype.justRevertAllEdits = function () {
     var data;
+    this.doApi('stopEditing');
     if (this.internalChange) {
       return;
     }
     if (!this.dataOriginals) {
       return;
     }
-    this.doApi('stopEditing');
+    //console.log('after stopEditing, editor count', this.doApi('getEditingCells').length);
     if (lib.isArray(this.get('data'))) {
       data = this.get('data').slice();
       this.dataOriginals.traverse(function (val, recindex) {
@@ -313,8 +329,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
       this.purgeDataOriginals();
       this.set('changedCellCount', 0);
       this.set('editedCellCount', 0);
-      this.set('addedRowCount', 0);
-      this.set('changedByUser', false);
       data = null;
       return;
     }
@@ -621,15 +635,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return this.jobs.run('.', new outerlib.jobs.CellUpdater(this, rownode, coldef.field, record[coldef.field]));
   };
 
-  //statics
-  function setChangedByUser () {
-    this.set('changedByUser', 
-      this.get('editedCellCount')!=0
-      || this.get('changedCellCount')!=0
-      || this.get('addedRowCount')!=0
-    );
-  }
-  //endof statics
+  EditableAgGridMixin.prototype.indexForNewRowFromBlank = function (row) {
+    return null;
+  };
 
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
@@ -641,6 +649,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      
       , 'revertAllEdits'
+      , 'justRevertAllEdits'
       , 'justUndoEdits'
       , 'get_dataWOChangedKeys'
       , 'get_changedRowsWOChangedKeys'
@@ -658,6 +667,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'updateRow'
       , 'updateConsecutiveRows'
       , 'setDataValueRowNodeRecColDef'
+      , 'indexForNewRowFromBlank'
     );
   }
 
@@ -684,10 +694,13 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
   }
   function changedCleaner (onlyedited, res, record) {
-    var ret, prop;
     if (onlyedited && noChanged(record)) {
       return res;
     }
+    return plainCleaner(res, record);
+  }
+  function plainCleaner (res, record) {
+    var ret, prop;
     ret = {};
     for(prop in record) {
       if (!record.hasOwnProperty(prop)) {
@@ -759,17 +772,43 @@ function createEditableMixin (execlib, outerlib, mylib) {
     changedrows.push(deltas);
   }
 
-  //static
+  //statics
+  function setChangedByUser () {
+    this.set('changedByUser', 
+      this.get('editedCellCount')!=0
+      || this.get('changedCellCount')!=0
+      || this.get('addedRowCount')!=0
+    );
+  }
   function addNewRowFromBlank (create_new, newrow) {
+    var newrowindex, newdata;
     if (create_new) {
+      this.pristineData = this.pristineData || this.get('data').reduce(plainCleaner, []);
       this.internalChange = true;
-      this.set(
-        'data', 
-        this.blankRowController.config.position=='bottom'
+      newrowindex = this.indexForNewRowFromBlank(newrow);
+      if (lib.isNumber(newrowindex)) {
+        this.addedRowAtIndex = newrowindex;
+        newdata = this.get('data').slice();
+        newdata.splice(newrowindex, 0, newrow);        
+      } else {
+        this.addedRowAtIndex = this.blankRowController.config.position=='bottom'
+        ?
+        this.get('data').length
+        :
+        0;
+        newdata = this.blankRowController.config.position=='bottom'
         ?
         this.get('data').slice().concat([newrow])
         :
-        [newrow].concat(this.get('data'))
+        [newrow].concat(this.get('data'));
+      }
+      this.doApi('stopEditing');
+      if (this.dataOriginals) {
+        this.dataOriginals.remove(this.get('data').length);
+      }
+      this.set(
+        'data', 
+        newdata
       ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
@@ -795,9 +834,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
     })
     _cb = null;
   }
-  //endof static
+  //endof statics
 
   //setValues on editobj
+  //statics on editobj
   function setValues (rec) {
     var editor = editorWithin.call(this, rec);
     lib.traverseShallow(rec, dataSetter.bind(this));
@@ -822,6 +862,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     findobj = null;
     return ret;
   }
+  //endof statics on editobj
   function isContainedInEditedCell (findobj, editor) {
     if (!editor) {return;}
     var isfound = (lib.isFunction(editor.matchesRowAndColumnNames)

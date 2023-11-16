@@ -3,6 +3,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
 
   var Base = mylib.AllexBase;
   var lib = execlib.lib;
+  var _id = 0;
 
   function AllexLookupEditor () {
     Base.call(this);
@@ -23,7 +24,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
 
     return {
       type: 'CustomSelect',
-      name: 'LookupEditor',
+      name: 'LookupEditor'+(++_id),
       options: options
     }
   };
@@ -33,6 +34,9 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
     Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     var el = panel.$element;
+    if (!el) {
+      return;
+    }
     lib.runNext(el.trigger.bind(el, 'focus'));
     el = null;
   };

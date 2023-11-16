@@ -51,10 +51,10 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     }
   };
   AllexBaseEditor.prototype.getGui = function () {
-    return this.panel ? this.panel.$element[0] : null;
+    return (this.panel && this.panel.$element && this.panel.$element.length>0) ? this.panel.$element[0] : null;
   };
   AllexBaseEditor.prototype.getValue = function () {
-    return this.panel ? this.editValueOfPanel() : null;
+    return this.panelLoaded ? this.editValueOfPanel() : this.initParams.value;
   };
   AllexBaseEditor.prototype.isCancelBeforeStart = function () {
     return !this.panel;

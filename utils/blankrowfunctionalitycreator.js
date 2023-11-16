@@ -164,6 +164,9 @@ function createBlankRowFunctionality (lib, mylib) {
     if (!(this.grid && this.rowNode)) {
       return;
     }
+    if (this.grid.doApi('getEditingCells').length>0) {
+      return;
+    }
     this.grid.doApi('startEditingCell', {
       rowIndex: this.rowNode.childIndex, 
       colKey: this.grid.editablepropnames[0]

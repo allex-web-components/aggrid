@@ -4,6 +4,7 @@ function createUtils (lib) {
   var mylib = {};
   require('./columndefutilscreator')(lib, mylib);
   require('./blankrowfunctionalitycreator')(lib, mylib);
+  require('./validitymonitorcreator')(lib, mylib);
 
   return mylib;
 }

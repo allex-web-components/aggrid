@@ -52,10 +52,10 @@ function createAllexBaseEditor (execlib, outerlib, mylib) {
     }
   };
   AllexBaseEditor.prototype.getGui = function () {
-    return this.panel ? this.panel.$element[0] : null;
+    return (this.panel && this.panel.$element && this.panel.$element.length>0) ? this.panel.$element[0] : null;
   };
   AllexBaseEditor.prototype.getValue = function () {
-    return this.panel ? this.editValueOfPanel() : null;
+    return this.panelLoaded ? this.editValueOfPanel() : this.initParams.value;
   };
   AllexBaseEditor.prototype.isCancelBeforeStart = function () {
     return !this.panel;
@@ -250,7 +250,10 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexInputBaseEditor.prototype.onPanelInitiallyLoaded = function (panel) {
     Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     try {
-      var el = panel.getElement('Input').$element;
+      var el = panel.$element ? panel.$element.find('input').filter(':visible:first') : null;
+      if (!(el && el.length>0)) {
+        return;
+      }
       lib.runNext(el.trigger.bind(el, 'focus'));
       el = null;
     }catch(e){
@@ -306,6 +309,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
 
   var Base = mylib.AllexBase;
   var lib = execlib.lib;
+  var _id = 0;
 
   function AllexLookupEditor () {
     Base.call(this);
@@ -326,7 +330,7 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
 
     return {
       type: 'CustomSelect',
-      name: 'LookupEditor',
+      name: 'LookupEditor'+(++_id),
       options: options
     }
   };
@@ -336,6 +340,9 @@ function createAllexLookupEditor (execlib, lR, o, m, outerlib, mylib) {
   AllexLookupEditor.prototype.onPanelInitiallyLoaded = function (panel) {
     Base.prototype.onPanelInitiallyLoaded.call(this, panel);
     var el = panel.$element;
+    if (!el) {
+      return;
+    }
     lib.runNext(el.trigger.bind(el, 'focus'));
     el = null;
   };
@@ -847,6 +854,7 @@ function createGrid (execlib, applib, mylib) {
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
     this.optionLevelHandlers = new lib.Map();
+    this.validityMonitor = new mylib.utils.ValidityMonitor(this);
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
@@ -859,10 +867,12 @@ function createGrid (execlib, applib, mylib) {
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
     this.selectedRows = null;
+    this.valid = true;
   }
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.valid = null;
     this.selectedRows = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -898,6 +908,10 @@ function createGrid (execlib, applib, mylib) {
     }
     mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
+    if(this.validityMonitor) {
+      this.validityMonitor.destroy();
+    }
+    this.validityMonitor = null;
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
     }
@@ -925,17 +939,22 @@ function createGrid (execlib, applib, mylib) {
       */
     }
   };
+  function freezer (obj) {
+    return lib.pickExcept(obj, []);
+  }
+  function frozenarry (arry) {
+    return lib.isArray(arry) ? arry.map(freezer) : arry;
+  }
   AgGridElement.prototype.set_data = function (data) {
     var edits, checkedits;
     if (data == this.data) {
       return false;
     }
     edits = this.lastEditedCellsBeforeSetData || this.doApi('getEditingCells');
-    checkedits;
-    this.data = data;
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
+    this.data = data;
     this.doApi('setRowData', data); 
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
@@ -951,13 +970,17 @@ function createGrid (execlib, applib, mylib) {
   };
   //static
   function editStarter(cellposition) {
+    var indcorr = lib.isNumber(this.addedRowAtIndex) ? this.addedRowAtIndex : Infinity;
+    var finalrowindex;
+    this.addedRowAtIndex = null;
     if ((this.get('data')||[]).length<=cellposition.rowIndex) {
       console.log('startEditingCell skipped on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
       return;
     }
-    console.log('startEditingCell on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
+    finalrowindex = cellposition.rowIndex>=indcorr ? cellposition.rowIndex+1 : cellposition.rowIndex;
+    console.log('starting edit on rowIndex', finalrowindex, 'because original rowIndex', cellposition.rowIndex, 'and corr', indcorr);
     this.doApi('startEditingCell', {
-      rowIndex: cellposition.rowIndex,
+      rowIndex: finalrowindex,
       colKey: cellposition.column,
       rowPinned: cellposition.rowPinned
     });
@@ -1211,7 +1234,7 @@ function createGrid (execlib, applib, mylib) {
     if (!lib.isArray(columndefs)) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
-    if (!columndefs.every(isColumnOk)) {
+    if (!columndefs.every(isColumnOk.bind(this))) {
       throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
   };
@@ -1222,9 +1245,6 @@ function createGrid (execlib, applib, mylib) {
     var selnodes = evnt.api.getSelectedNodes();
     var areselnodesarry = lib.isArray(selnodes);
     var selnode = (areselnodesarry && selnodes.length>0) ? selnodes[selnodes.length-1] : null;
-    if  (selnode) {
-      console.log('selected node', selnode);
-    }
     this.set('selectedRows', areselnodesarry ? selnodes.reduce(dataer, []) : []);
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -1270,7 +1290,7 @@ function createGrid (execlib, applib, mylib) {
   function isColumnOk (obj) {
     var name, params, fmter, prser;
     if (!obj) return false;
-    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
+    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk.bind(this));
     if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
       name = obj.valueFormatter.name;
       if (!name) {
@@ -1286,6 +1306,9 @@ function createGrid (execlib, applib, mylib) {
       if (prser) {
         obj.valueParser = prser.bind(null, params);
       }
+    }
+    if (obj.cellClassRules && obj.cellClassRules.invalid) {
+      obj.cellClassRules.invalid = this.validityMonitor.addParticular(obj.field, obj.cellClassRules.invalid)
     }
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
@@ -1316,7 +1339,9 @@ function createGrid (execlib, applib, mylib) {
   */
   EditableAgGridElement.prototype.set_data = function (data) {
     this.justUndoEdits();
-    this.revertAllEdits();
+    console.log('before justRevertAllEdits', frozenarry(data));
+    this.justRevertAllEdits();
+    console.log('after justRevertAllEdits', frozenarry(data));
     return AgGridElement.prototype.set_data.call(this, data);
   };
 
@@ -1745,6 +1770,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.internalChange = false;
     this.cellEditingStopped = false;
     this.lastEditedCellsBeforeSetData = null;
+    this.pristineData = null;
+    this.addedRowAtIndex = null;
   }
 
   EditableAgGridMixin.prototype.destroy = function () {
@@ -1757,6 +1784,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
       }
     }
     */
+    this.addedRowAtIndex = null;
+    this.pristineData = null;
     this.lastEditedCellsBeforeSetData = null;
     this.cellEditingStopped = null;
     this.internalChange = null;
@@ -1823,7 +1852,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
   }
 
-
   
   EditableAgGridMixin.prototype.onCellValueChanged = function (params) {
     var rec, fieldname, editableedited, changed, changedcountdelta;
@@ -1833,7 +1861,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       return;
     }
     pk = this.primaryKey;
-    params.inBatchEdit = this.inBatchEdit;
+    params.inBatchEdit = this.inBatchEdit;    
     params.setValues = setValues.bind(params);
     if (params.newValue === params.oldValue) {
       this.cellEdited.fire(params);
@@ -1966,14 +1994,27 @@ function createEditableMixin (execlib, outerlib, mylib) {
   };
 
   EditableAgGridMixin.prototype.revertAllEdits = function () {
+    var pdata;
+    this.justRevertAllEdits();
+    pdata = this.pristineData;
+    this.pristineData = null;
+    if (pdata) {
+      console.log('setting pristine data', pdata);
+      this.set('data', pdata);
+    }
+    this.set('addedRowCount', 0);
+    this.set('changedByUser', false);
+  };
+  EditableAgGridMixin.prototype.justRevertAllEdits = function () {
     var data;
+    this.doApi('stopEditing');
     if (this.internalChange) {
       return;
     }
     if (!this.dataOriginals) {
       return;
     }
-    this.doApi('stopEditing');
+    //console.log('after stopEditing, editor count', this.doApi('getEditingCells').length);
     if (lib.isArray(this.get('data'))) {
       data = this.get('data').slice();
       this.dataOriginals.traverse(function (val, recindex) {
@@ -1985,8 +2026,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
       this.purgeDataOriginals();
       this.set('changedCellCount', 0);
       this.set('editedCellCount', 0);
-      this.set('addedRowCount', 0);
-      this.set('changedByUser', false);
       data = null;
       return;
     }
@@ -2293,15 +2332,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return this.jobs.run('.', new outerlib.jobs.CellUpdater(this, rownode, coldef.field, record[coldef.field]));
   };
 
-  //statics
-  function setChangedByUser () {
-    this.set('changedByUser', 
-      this.get('editedCellCount')!=0
-      || this.get('changedCellCount')!=0
-      || this.get('addedRowCount')!=0
-    );
-  }
-  //endof statics
+  EditableAgGridMixin.prototype.indexForNewRowFromBlank = function (row) {
+    return null;
+  };
 
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
@@ -2313,6 +2346,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      
       , 'revertAllEdits'
+      , 'justRevertAllEdits'
       , 'justUndoEdits'
       , 'get_dataWOChangedKeys'
       , 'get_changedRowsWOChangedKeys'
@@ -2330,6 +2364,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'updateRow'
       , 'updateConsecutiveRows'
       , 'setDataValueRowNodeRecColDef'
+      , 'indexForNewRowFromBlank'
     );
   }
 
@@ -2356,10 +2391,13 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
   }
   function changedCleaner (onlyedited, res, record) {
-    var ret, prop;
     if (onlyedited && noChanged(record)) {
       return res;
     }
+    return plainCleaner(res, record);
+  }
+  function plainCleaner (res, record) {
+    var ret, prop;
     ret = {};
     for(prop in record) {
       if (!record.hasOwnProperty(prop)) {
@@ -2431,17 +2469,43 @@ function createEditableMixin (execlib, outerlib, mylib) {
     changedrows.push(deltas);
   }
 
-  //static
+  //statics
+  function setChangedByUser () {
+    this.set('changedByUser', 
+      this.get('editedCellCount')!=0
+      || this.get('changedCellCount')!=0
+      || this.get('addedRowCount')!=0
+    );
+  }
   function addNewRowFromBlank (create_new, newrow) {
+    var newrowindex, newdata;
     if (create_new) {
+      this.pristineData = this.pristineData || this.get('data').reduce(plainCleaner, []);
       this.internalChange = true;
-      this.set(
-        'data', 
-        this.blankRowController.config.position=='bottom'
+      newrowindex = this.indexForNewRowFromBlank(newrow);
+      if (lib.isNumber(newrowindex)) {
+        this.addedRowAtIndex = newrowindex;
+        newdata = this.get('data').slice();
+        newdata.splice(newrowindex, 0, newrow);        
+      } else {
+        this.addedRowAtIndex = this.blankRowController.config.position=='bottom'
+        ?
+        this.get('data').length
+        :
+        0;
+        newdata = this.blankRowController.config.position=='bottom'
         ?
         this.get('data').slice().concat([newrow])
         :
-        [newrow].concat(this.get('data'))
+        [newrow].concat(this.get('data'));
+      }
+      this.doApi('stopEditing');
+      if (this.dataOriginals) {
+        this.dataOriginals.remove(this.get('data').length);
+      }
+      this.set(
+        'data', 
+        newdata
       ); //loud, with 'data' listeners being triggered
       this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
@@ -2467,9 +2531,10 @@ function createEditableMixin (execlib, outerlib, mylib) {
     })
     _cb = null;
   }
-  //endof static
+  //endof statics
 
   //setValues on editobj
+  //statics on editobj
   function setValues (rec) {
     var editor = editorWithin.call(this, rec);
     lib.traverseShallow(rec, dataSetter.bind(this));
@@ -2494,6 +2559,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     findobj = null;
     return ret;
   }
+  //endof statics on editobj
   function isContainedInEditedCell (findobj, editor) {
     if (!editor) {return;}
     var isfound = (lib.isFunction(editor.matchesRowAndColumnNames)
@@ -2923,6 +2989,9 @@ function createBlankRowFunctionality (lib, mylib) {
     if (!(this.grid && this.rowNode)) {
       return;
     }
+    if (this.grid.doApi('getEditingCells').length>0) {
+      return;
+    }
     this.grid.doApi('startEditingCell', {
       rowIndex: this.rowNode.childIndex, 
       colKey: this.grid.editablepropnames[0]
@@ -3047,8 +3116,73 @@ function createUtils (lib) {
   var mylib = {};
   require('./columndefutilscreator')(lib, mylib);
   require('./blankrowfunctionalitycreator')(lib, mylib);
+  require('./validitymonitorcreator')(lib, mylib);
 
   return mylib;
 }
 module.exports = createUtils;
-},{"./blankrowfunctionalitycreator":28,"./columndefutilscreator":29}]},{},[23]);
+},{"./blankrowfunctionalitycreator":28,"./columndefutilscreator":29,"./validitymonitorcreator":31}],31:[function(require,module,exports){
+function createValidityMonitor (lib, outerlib) {
+  'use strict';
+
+  function ParticularValidityMonitor (monitor, func) {
+    this.monitor = monitor;
+    this.func = func;
+    this.invalids = new lib.Map();
+    this.outputFunc = this.invalider.bind(this);
+  }
+  ParticularValidityMonitor.prototype.destroy = function () {
+    this.outputFunc = null;
+    if(this.invalids) {
+      this.invalids.destroy();
+    }
+    this.invalids = null;
+  };
+  ParticularValidityMonitor.prototype.invalider = function (params) {
+    var ret = this.func(params);
+    if (!ret) {
+      this.invalids.remove(params.node.rowIndex);
+      this.monitor.recheck();
+      return ret;
+    }
+    if (this.invalids.get(params.node.rowIndex)) {
+      return ret;
+    }
+    this.invalids.add(params.node.rowIndex, true);
+    this.monitor.recheck();
+    return ret;
+  };
+
+  function ValidityMonitor (grid) {
+    this.grid = grid;
+    this.particulars = new lib.Map();
+  }
+  ValidityMonitor.prototype.destroy = function () {
+    if(this.particulars) {
+      lib.containerDestroyAll(this.particulars);
+      this.particulars.destroy();
+    }
+    this.particulars = null;
+    this.grid = null;
+  };
+  ValidityMonitor.prototype.addParticular = function (colfield, func) {
+    var part = this.particulars.get(colfield);
+    if (!part) {
+      part = new ParticularValidityMonitor(this, func);
+      this.particulars.add(colfield, part);
+    }
+    return part.outputFunc;
+  };
+  ValidityMonitor.prototype.recheck = function () {
+    var totalinvs = this.particulars.reduce(adder, 0);
+    this.grid.set('valid', totalinvs==0);
+  };
+
+  function adder (res, val, key) {
+    return res+val.invalids.count;
+  }
+
+  outerlib.ValidityMonitor = ValidityMonitor;
+}
+module.exports = createValidityMonitor;
+},{}]},{},[23]);

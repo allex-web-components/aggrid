@@ -11,6 +11,7 @@ function createGrid (execlib, applib, mylib) {
   function AgGridElement (id, options) {
     this.fullWidthRowManagers = null;
     this.optionLevelHandlers = new lib.Map();
+    this.validityMonitor = new mylib.utils.ValidityMonitor(this);
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
@@ -23,10 +24,12 @@ function createGrid (execlib, applib, mylib) {
     this.masterRowExpanding = this.createBufferableHookCollection();
     this.masterRowCollapsing = this.createBufferableHookCollection();
     this.selectedRows = null;
+    this.valid = true;
   }
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
+    this.valid = null;
     this.selectedRows = null;
     if (this.masterRowCollapsing) {
       this.masterRowCollapsing.destroy();
@@ -62,6 +65,10 @@ function createGrid (execlib, applib, mylib) {
     }
     mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
+    if(this.validityMonitor) {
+      this.validityMonitor.destroy();
+    }
+    this.validityMonitor = null;
     if (lib.isArray(this.fullWidthRowManagers)){
       lib.arryDestroyAll(this.fullWidthRowManagers);
     }
@@ -89,17 +96,22 @@ function createGrid (execlib, applib, mylib) {
       */
     }
   };
+  function freezer (obj) {
+    return lib.pickExcept(obj, []);
+  }
+  function frozenarry (arry) {
+    return lib.isArray(arry) ? arry.map(freezer) : arry;
+  }
   AgGridElement.prototype.set_data = function (data) {
     var edits, checkedits;
     if (data == this.data) {
       return false;
     }
     edits = this.lastEditedCellsBeforeSetData || this.doApi('getEditingCells');
-    checkedits;
-    this.data = data;
     this.__children.traverse(function (chld) {
       chld.destroy();
     });
+    this.data = data;
     this.doApi('setRowData', data); 
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
@@ -115,13 +127,17 @@ function createGrid (execlib, applib, mylib) {
   };
   //static
   function editStarter(cellposition) {
+    var indcorr = lib.isNumber(this.addedRowAtIndex) ? this.addedRowAtIndex : Infinity;
+    var finalrowindex;
+    this.addedRowAtIndex = null;
     if ((this.get('data')||[]).length<=cellposition.rowIndex) {
       console.log('startEditingCell skipped on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
       return;
     }
-    console.log('startEditingCell on row', cellposition.rowIndex, 'because data len', (this.get('data')||[]).length);
+    finalrowindex = cellposition.rowIndex>=indcorr ? cellposition.rowIndex+1 : cellposition.rowIndex;
+    console.log('starting edit on rowIndex', finalrowindex, 'because original rowIndex', cellposition.rowIndex, 'and corr', indcorr);
     this.doApi('startEditingCell', {
-      rowIndex: cellposition.rowIndex,
+      rowIndex: finalrowindex,
       colKey: cellposition.column,
       rowPinned: cellposition.rowPinned
     });
@@ -375,7 +391,7 @@ function createGrid (execlib, applib, mylib) {
     if (!lib.isArray(columndefs)) {
       throw new lib.Error('NO_GRIDCONFIG_COLUMNS', 'options.aggrid must have "columnDefs" as an Array of column Objects');
     }
-    if (!columndefs.every(isColumnOk)) {
+    if (!columndefs.every(isColumnOk.bind(this))) {
       throw new lib.Error('INVALID_COLUMN_OBJECT', 'column Object must have field "field" or "colId" or "valueGetter');
     }
   };
@@ -386,9 +402,6 @@ function createGrid (execlib, applib, mylib) {
     var selnodes = evnt.api.getSelectedNodes();
     var areselnodesarry = lib.isArray(selnodes);
     var selnode = (areselnodesarry && selnodes.length>0) ? selnodes[selnodes.length-1] : null;
-    if  (selnode) {
-      console.log('selected node', selnode);
-    }
     this.set('selectedRows', areselnodesarry ? selnodes.reduce(dataer, []) : []);
   };
   AgGridElement.prototype.isFullWidthCell = function (rownode) {
@@ -434,7 +447,7 @@ function createGrid (execlib, applib, mylib) {
   function isColumnOk (obj) {
     var name, params, fmter, prser;
     if (!obj) return false;
-    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk);
+    if (lib.isArray(obj.children)) return obj.children.every(isColumnOk.bind(this));
     if (obj.valueFormatter && !lib.isFunction(obj.valueFormatter)) {
       name = obj.valueFormatter.name;
       if (!name) {
@@ -450,6 +463,9 @@ function createGrid (execlib, applib, mylib) {
       if (prser) {
         obj.valueParser = prser.bind(null, params);
       }
+    }
+    if (obj.cellClassRules && obj.cellClassRules.invalid) {
+      obj.cellClassRules.invalid = this.validityMonitor.addParticular(obj.field, obj.cellClassRules.invalid)
     }
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
@@ -480,7 +496,9 @@ function createGrid (execlib, applib, mylib) {
   */
   EditableAgGridElement.prototype.set_data = function (data) {
     this.justUndoEdits();
-    this.revertAllEdits();
+    console.log('before justRevertAllEdits', frozenarry(data));
+    this.justRevertAllEdits();
+    console.log('after justRevertAllEdits', frozenarry(data));
     return AgGridElement.prototype.set_data.call(this, data);
   };
 
