@@ -67,6 +67,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.editedCellCount = 0;
     this.editedRowsCount = 0;
     this.addedRowCount = 0;
+    this.deletedRowCount = 0;
     this.changedByUser = false;
     this.inBatchEdit = false;
     this.batchEditEvents = null;
@@ -74,6 +75,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.cellEditingStopped = false;
     this.lastEditedCellsBeforeSetData = null;
     this.pristineData = null;
+    this.deletedRows = null;
     this.addedRowAtIndex = null;
   }
 
@@ -88,6 +90,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
     */
     this.addedRowAtIndex = null;
+    this.deletedRows = null;
     this.pristineData = null;
     this.lastEditedCellsBeforeSetData = null;
     this.cellEditingStopped = null;
@@ -95,6 +98,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.batchEditEvents = null;
     this.inBatchEdit = null;
     this.changedByUser = null;
+    this.deletedRowCount = null;
     this.addedRowCount = null;
     this.editedRowsCount = null;
     this.editedCellCount = null;
@@ -270,6 +274,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (this.batchEditEvents) {
       this.set('changedCellCount', this.get('changedCellCount') + this.batchEditEvents.changed);
       this.set('editedCellCount', this.get('editedCellCount') + this.batchEditEvents.edited);
+      setChangedByUser.call(this);
     }
     this.batchEditEvents = null;
     this.doApi('refreshCells');
@@ -294,45 +299,42 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.set('editedRowsCount', 0);
     this.set('changedCellCount', 0);
     this.set('editedCellCount', 0);
+    setChangedByUser.call(this);
   };
 
   EditableAgGridMixin.prototype.revertAllEdits = function () {
     var pdata;
-    this.justRevertAllEdits();
+    var data;
+    this.doApi('stopEditing');
+    if (this.internalChange) {
+      return;
+    }
+    this.internalChange = true;
+    if (this.dataOriginals) {
+      if (lib.isArray(this.get('data'))) {
+        data = this.get('data').slice();
+        this.dataOriginals.traverse(function (val, recindex) {
+          data[recindex] = val;
+        });
+        this.set('data', data);
+        this.purgeDataOriginals();
+        this.set('changedCellCount', 0);
+        this.set('editedCellCount', 0);
+        data = null;
+      }
+      this.purgeDataOriginals();
+    }
     pdata = this.pristineData;
     this.pristineData = null;
     if (pdata) {
       console.log('setting pristine data', pdata);
       this.set('data', pdata);
     }
+    this.deletedRows = null;
     this.set('addedRowCount', 0);
-    this.set('changedByUser', false);
-  };
-  EditableAgGridMixin.prototype.justRevertAllEdits = function () {
-    var data;
-    this.doApi('stopEditing');
-    if (this.internalChange) {
-      return;
-    }
-    if (!this.dataOriginals) {
-      return;
-    }
-    //console.log('after stopEditing, editor count', this.doApi('getEditingCells').length);
-    if (lib.isArray(this.get('data'))) {
-      data = this.get('data').slice();
-      this.dataOriginals.traverse(function (val, recindex) {
-        data[recindex] = val;
-      });
-      this.internalChange = true;
-      this.set('data', data);
-      this.internalChange = false;
-      this.purgeDataOriginals();
-      this.set('changedCellCount', 0);
-      this.set('editedCellCount', 0);
-      data = null;
-      return;
-    }
-    this.purgeDataOriginals();
+    this.set('deletedRowCount', 0);
+    setChangedByUser.call(this);
+    this.internalChange = false;
   };
   function editundoer (rec, originalrec) {
     var prop;
@@ -639,6 +641,32 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return null;
   };
 
+  EditableAgGridMixin.prototype.snapshotPristineData = function () {
+    this.pristineData = this.pristineData || this.get('data').reduce(plainCleaner, []);
+  };
+
+  EditableAgGridMixin.prototype.considerRowIndexForDeletion = function (index) {
+    var dataoriginalkeysfordec;
+    if (this.dataOriginals) {
+      this.dataOriginals.remove(index);
+      dataoriginalkeysfordec = this.dataOriginals.reduce(keyGEthan, {target: index, res: []}).res;
+      dataoriginalkeysfordec.sort(function (a, b) {return a-b;})
+      dataoriginalkeysfordec.forEach(decDataOriginal.bind(this));
+    }
+  };
+
+  EditableAgGridMixin.prototype.considerDeletedRows = function (deletedrows) {
+    var deletedpristinerows;
+    if (lib.isNonEmptyArray(deletedrows)) {
+      deletedpristinerows = deletedrows.reduce(deletedFromPristinePicker.bind(this), []);
+      this.deletedRows = (this.deletedRows||[]).concat(deletedpristinerows);
+      this.set('addedRowCount', this.get('addedRowCount')+deletedpristinerows.length-deletedrows.length);
+      this.set('deletedRowCount', this.get('deletedRowCount')+deletedpristinerows.length);
+      setChangedByUser.call(this);
+    }
+    return deletedrows;
+  }
+
   EditableAgGridMixin.addMethods = function (klass) {
     lib.inheritMethods(klass, EditableAgGridMixin
       , 'onCellValueChanged'
@@ -649,7 +677,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'onSelectionChangedForEdit'
       , 'purgeDataOriginals'      
       , 'revertAllEdits'
-      , 'justRevertAllEdits'
       , 'justUndoEdits'
       , 'get_dataWOChangedKeys'
       , 'get_changedRowsWOChangedKeys'
@@ -668,6 +695,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
       , 'updateConsecutiveRows'
       , 'setDataValueRowNodeRecColDef'
       , 'indexForNewRowFromBlank'
+      , 'snapshotPristineData'
+      , 'considerRowIndexForDeletion'
+      , 'considerDeletedRows'
     );
   }
 
@@ -771,6 +801,32 @@ function createEditableMixin (execlib, outerlib, mylib) {
     }
     changedrows.push(deltas);
   }
+  function compareObjsWOChangedKeys (a, b) {
+    var prop;
+    for(prop in a) {
+      if (!a.hasOwnProperty(prop)) {
+        continue;
+      }
+      if (changeKeyDetector(prop)){
+        continue;
+      }
+      if (!lib.isEqual(a[prop], b[prop])) {
+        return false;
+      }
+    }
+    return true;
+  }
+  function arryRecognizes (arry, obj) {
+    var ret = arry.every(compareObjsWOChangedKeys.bind(obj));
+    obj = null;
+    return ret;
+  }
+  function keyGEthan (res, val, key) {
+    if (key>=res.target) {
+      res.res.push(key);
+    }
+    return res;
+  }
 
   //statics
   function setChangedByUser () {
@@ -778,12 +834,13 @@ function createEditableMixin (execlib, outerlib, mylib) {
       this.get('editedCellCount')!=0
       || this.get('changedCellCount')!=0
       || this.get('addedRowCount')!=0
+      || this.get('deletedRowCount')!=0
     );
   }
   function addNewRowFromBlank (create_new, newrow) {
-    var newrowindex, newdata;
+    var newrowindex, newdata, blankcontrollerrow, dataoriginalkeysforbumping;
     if (create_new) {
-      this.pristineData = this.pristineData || this.get('data').reduce(plainCleaner, []);
+      this.snapshotPristineData();
       this.internalChange = true;
       newrowindex = this.indexForNewRowFromBlank(newrow);
       if (lib.isNumber(newrowindex)) {
@@ -804,17 +861,22 @@ function createEditableMixin (execlib, outerlib, mylib) {
       }
       this.doApi('stopEditing');
       if (this.dataOriginals) {
-        this.dataOriginals.remove(this.get('data').length);
+        blankcontrollerrow = this.blankRowController.rowNode.rowIndex;
+        this.dataOriginals.remove(blankcontrollerrow);
+        dataoriginalkeysforbumping = this.dataOriginals.reduce(keyGEthan, {target: blankcontrollerrow, res: []}).res;
+        dataoriginalkeysforbumping.sort(function (a, b) {return b-a;})
+        dataoriginalkeysforbumping.forEach(bumpDataOriginal.bind(this));
       }
       this.set(
         'data', 
         newdata
       ); //loud, with 'data' listeners being triggered
-      this.internalChange = false;
       this.set('addedRowCount', this.get('addedRowCount')+1);
       this.blankRowController.startEditing();
       //lib.runNext(startEditingCell.bind(this));
     }
+    setChangedByUser.call(this);
+    this.internalChange = false;
     this.newRowAdded.fire(newrow);
   }
   /*
@@ -833,6 +895,18 @@ function createEditableMixin (execlib, outerlib, mylib) {
       _cb(n.rec, n.index);
     })
     _cb = null;
+  }
+  function deletedFromPristinePicker (res, delrow) {
+    if (this.pristineData && arryRecognizes(this.pristineData, delrow)) {
+      res.push(delrow);
+    }
+    return res;
+  }
+  function decDataOriginal (index) {
+    this.dataOriginals.add(index-1, this.dataOriginals.remove(index));
+  }
+  function bumpDataOriginal (index) {
+    this.dataOriginals.add(index+1, this.dataOriginals.remove(index));
   }
   //endof statics
 

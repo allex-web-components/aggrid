@@ -4,6 +4,7 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
   var Base = mylib.AllexBase;
   var lib = execlib.lib;
   var applib = lR.get('allex_applib');
+  var _MAXFOCUSATTEMPTS = 5;
 
   var WebElement = applib.getElementType('WebElement');
 
@@ -87,9 +88,11 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     Base.call(this);
     this.classLevelValidations = this.getClassLevelValidations();
     this.valid = true;
+    this.focusAttempts = 0;
   }
   lib.inherit(AllexInputBaseEditor, Base);
   AllexInputBaseEditor.prototype.destroy = function () {
+    this.focusAttempts = null;
     this.valid = null;
     this.classLevelValidations = null;
     Base.prototype.destroy.call(this);
@@ -120,8 +123,14 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     try {
       var el = panel.$element ? panel.$element.find('input').filter(':visible:first') : null;
       if (!(el && el.length>0)) {
+        if (this.focusAttempts<_MAXFOCUSATTEMPTS) {
+          this.focusAttempts++;
+          lib.runNext(this.onPanelInitiallyLoaded.bind(this, panel), 100);
+          panel = null;
+        }
         return;
       }
+      this.focusAttempts=0;
       lib.runNext(el.trigger.bind(el, 'focus'));
       el = null;
     }catch(e){

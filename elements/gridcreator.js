@@ -206,10 +206,12 @@ function createGrid (execlib, applib, mylib) {
     //lib.runNext(this.refresh.bind(this));
   };
   AgGridElement.prototype.removeRow = function (rec, atindex) {
+    var ret;
     if (lib.isNumber(atindex)) {
-      (this.get('data')||[]).splice(atindex, 1);
+      ret = (this.get('data')||[]).splice(atindex, 1);
     }
     this.doApi('applyTransaction', {remove: [rec]});
+    return ret;
   };
   AgGridElement.prototype.removeRowByPropValue = function (propname, propval) {
     var recNindex = this.findRowAndIndexByPropVal(propname, propval);
@@ -498,8 +500,16 @@ function createGrid (execlib, applib, mylib) {
   */
   EditableAgGridElement.prototype.set_data = function (data) {
     this.justUndoEdits();
-    this.justRevertAllEdits();
+    this.revertAllEdits();
     return AgGridElement.prototype.set_data.call(this, data);
+  };
+  EditableAgGridElement.prototype.removeRow = function (rec, atindex) {
+    var deleted;
+    this.snapshotPristineData();
+    this.considerRowIndexForDeletion(atindex);
+    deleted = AgGridElement.prototype.removeRow.call(this, rec, atindex);
+    this.considerDeletedRows(deleted);
+    return deleted;
   };
 
   applib.registerElementType('EditableAgGrid', EditableAgGridElement);
