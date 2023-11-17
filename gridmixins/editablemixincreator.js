@@ -817,7 +817,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return true;
   }
   function arryRecognizes (arry, obj) {
-    var ret = arry.every(compareObjsWOChangedKeys.bind(obj));
+    var ret = arry.some(compareObjsWOChangedKeys.bind(null, obj));
     obj = null;
     return ret;
   }
