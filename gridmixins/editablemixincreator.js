@@ -139,6 +139,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
     obj.enterNavigatesVertically=true;
     obj.enterNavigatesVerticallyAfterEdit=true;
     lib.arryOperations.appendNonExistingItems(this.changeablepropnames, this.trackablepropnames);
+    aggrid.navigateToNextCell = nextCellProc.bind(this);
+    aggrid.tabToNextCell = nextCellProc.bind(this);
     coldefs = null;
   };
 
@@ -281,9 +283,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
   };
 
   EditableAgGridMixin.prototype.purgeDataOriginals = function () {
-    if (this.internalChange) {
-      return;
-    }
     if (this.dataOriginals) {
       this.dataOriginals.destroy();
     }
@@ -313,13 +312,19 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (this.dataOriginals) {
       if (lib.isArray(this.get('data'))) {
         data = this.get('data').slice();
+        if (this.dataOriginals.reduce(function(res, val, key) {
+          if (key>res) {
+            return key;
+          }
+          return res;
+        }, -1) > data.length-1) {
+          throw new Error('data len mismatch');
+        }
         this.dataOriginals.traverse(function (val, recindex) {
           data[recindex] = val;
         });
-        this.set('data', data);
         this.purgeDataOriginals();
-        this.set('changedCellCount', 0);
-        this.set('editedCellCount', 0);
+        this.set('data', data);
         data = null;
       }
       this.purgeDataOriginals();
@@ -907,6 +912,18 @@ function createEditableMixin (execlib, outerlib, mylib) {
   }
   function bumpDataOriginal (index) {
     this.dataOriginals.add(index+1, this.dataOriginals.remove(index));
+  }
+  function nextCellProc (params) {
+    if (!params.nextCellPosition && this.cellEditingStopped) {
+      this.cellEditingStopped = false;
+      this.blankRowController.ifEditFinished(null, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
+      return {
+        rowPinned: params.previousCellPosition.rowPinned,
+        rowIndex: this.blankRowController.rowNode.rowIndex,
+        column: lib.isNonEmptyArray(this.editablepropnames) ? params.columnApi.getColumn(this.editablepropnames[0]) : params.previousCellPosition.column
+      };
+    }
+    return params.nextCellPosition||params.previousCellPosition;
   }
   //endof statics
 

@@ -13,7 +13,7 @@ function createBlankRowFunctionality (lib, mylib) {
     if (schema) {
       schemaval = lib.jsonschema.validate(row, schema, {throwError: false});
       if (schemaval.errors.length) {
-        console.error(schemaval.errors);
+        console.warn(schemaval.errors);
         return false;
       }
     }
