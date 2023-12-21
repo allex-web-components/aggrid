@@ -3033,6 +3033,7 @@ function createBlankRowFunctionality (lib, mylib) {
   BlankRowController.prototype.onSetData = function () {
     if (!this.grid) return;
     if (!this.config) return;
+    if (this.grid.data==null) return;
     this.rowNode = this.grid.addRowSoft({});
     this.rowNode.isBlank = true;
   };
