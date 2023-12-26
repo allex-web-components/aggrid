@@ -1873,7 +1873,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
   function checkTrackableInColDefs (coldefs, trackablename) {
     var col = outerlib.utils.columnDef.findRealColumnDefByField(coldefs, trackablename);
     if (!col) {
-      throw new lib.Error('TRACKABLW_NAME_NOT_A_COLDEF_NAME', 'Trackable name '+trackablename+' is not a name of any columnDef');
+      throw new lib.Error('TRACKABLE_NAME_NOT_A_COLDEF_NAME', 'Trackable name '+trackablename+' is not a name of any columnDef');
     }
   }
 
