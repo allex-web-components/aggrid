@@ -9,6 +9,7 @@ function createGrid (execlib, applib, mylib) {
   var arryopslib = lR.get('allex_arrayoperationslib');
 
   function AgGridElement (id, options) {
+    this.gridApi = null;
     this.fullWidthRowManagers = null;
     this.optionLevelHandlers = new lib.Map();
     this.validityMonitor = new mylib.utils.ValidityMonitor(this);
@@ -77,13 +78,17 @@ function createGrid (execlib, applib, mylib) {
     }
     this.optionLevelHandlers = null;
     this.fullWidthRowManagers = null;
+    if(this.gridApi) {
+      //this.gridApi.destroy();
+    }
+    this.gridApi = null;
   };
   AgGridElement.prototype.doThejQueryCreation = function () {
     var runtimeconfobj = {};
     WebElement.prototype.doThejQueryCreation.call(this);
     this.makeUpRunTimeConfiguration(runtimeconfobj);
     if (this.$element && this.$element.length) {
-      new agGrid.Grid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), runtimeconfobj));
+      this.gridApi = agGrid.createGrid(this.$element[0], lib.extend(this.getConfigVal('aggrid'), runtimeconfobj));
       this.listenForContextMenu();
       this.onAgGridElementCreated();
       /*
@@ -114,7 +119,7 @@ function createGrid (execlib, applib, mylib) {
       chld.destroy();
     });
     this.data = data;
-    this.doApi('setRowData', data); 
+    this.doApi('setGridOption', 'rowData', data);
     if (!lib.isArray(data)) {
       this.doApi('showLoadingOverlay');
     }
@@ -166,7 +171,7 @@ function createGrid (execlib, applib, mylib) {
       console.error(e);
       return false;
     }
-    this.doApi('setColumnDefs', coldefs);
+    this.doApi('setGridOption', 'columnDefs', coldefs);
     return true;
   };
   AgGridElement.prototype.refresh = function () {
@@ -200,7 +205,7 @@ function createGrid (execlib, applib, mylib) {
     data.splice((afterindex||0)+1, 0, rec);
     this.data = data;
     this.blankRowController.prepareForInsert();
-    this.doApi('setRowData', data);
+    this.doApi('setGridOption', 'rowData', data);
     this.blankRowController.ackInsertedRow(rec);
     this.refresh();
     //lib.runNext(this.refresh.bind(this));
@@ -293,14 +298,10 @@ function createGrid (execlib, applib, mylib) {
   };
 
   AgGridElement.prototype.doApi = function (fnname) {
-    var aggridopts = this.getConfigVal('aggrid');
-    if (!aggridopts) {
+    if (!this.gridApi) {
       return;
     }
-    if (!aggridopts.api) {
-      return;
-    }
-    return aggridopts.api[fnname].apply(aggridopts.api, Array.prototype.slice.call(arguments, 1));
+    return this.gridApi[fnname].apply(this.gridApi, Array.prototype.slice.call(arguments, 1));
   };
   AgGridElement.prototype.doColumnApi = function (fnname) {
     var aggridopts = this.getConfigVal('aggrid');
