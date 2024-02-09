@@ -153,6 +153,20 @@ function createGrid (execlib, applib, mylib) {
     });
   }
   //endof static
+  //helpers
+  function selectedRowCounter (obj, node) {
+    if (node.isSelected()) {
+      obj.selectedcnt++;
+    }
+  }
+  //endof helpers
+  AgGridElement.prototype.get_selectedRowCount = function () { //read-only
+    var obj = {selectedcnt: 0}, ret;
+    this.doApi('forEachNodeAfterFilterAndSort', selectedRowCounter.bind(null, obj));
+    ret = obj.selectedcnt;
+    obj = null;
+    return ret;
+  }
   AgGridElement.prototype.get_pinnedBottom = function (datarecords) {
     var aggridopts = this.getConfigVal('aggrid');
     return aggridopts ? aggridopts.pinnedBottomRowData : null;

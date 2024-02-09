@@ -86,6 +86,9 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     if (item.caption) {
       ret.text(item.caption);
     }
+    if (!lib.isFunction(item.action)) {
+      ret.addClass('disabled');
+    }
     ret.on('click', this.chooser);
     return ret;
   };
