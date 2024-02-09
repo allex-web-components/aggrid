@@ -868,6 +868,7 @@ function createGrid (execlib, applib, mylib) {
     this.checkOptions(options);
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
+    mylib.gridmixins.Exportable.call(this, options);
     this.data = [];
     this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
@@ -881,6 +882,7 @@ function createGrid (execlib, applib, mylib) {
   }
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
+  mylib.gridmixins.Exportable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
     this.valid = null;
     this.selectedRows = null;
@@ -916,6 +918,7 @@ function createGrid (execlib, applib, mylib) {
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
+    mylib.gridmixins.Exportable.prototype.destroy.call(this);
     mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
     if(this.validityMonitor) {
@@ -931,7 +934,7 @@ function createGrid (execlib, applib, mylib) {
     this.optionLevelHandlers = null;
     this.fullWidthRowManagers = null;
     if(this.gridApi) {
-      //this.gridApi.destroy();
+      this.gridApi.destroy();
     }
     this.gridApi = null;
   };
@@ -1399,6 +1402,346 @@ function createElements (execlib, mylib) {
 module.exports = createElements;
 
 },{"./chartcreator":6,"./gridcreator":13}],15:[function(require,module,exports){
+function createBaseExporter (execlib, outerlib) {
+  'use strict';
+
+  var lib = execlib.lib;
+
+  function Exporter (grid, options) {
+    this.grid = grid;
+    this.options = options||{};
+    this.visibleGroups = null;
+    this.visibleColumnNames = null;
+    this.visibleColumnIds = null;
+    this.result = null;
+    ctorInit.call(this);
+  }
+  Exporter.prototype.destroy = function () {
+    this.result = null;
+    this.visibleColumnIds = null;
+    this.visibleColumnNames = null;
+    this.visibleGroups = null;
+    this.options = null;
+    this.grid = null;
+  };
+  Exporter.prototype.go = function () {
+    var methodname;
+    this.initResult();
+    if (!this.grid) {
+      return;
+    }
+    if (this.options.headernames) {
+      if (groupNamesUsable.call(this)) {
+        goGroupNames.call(this);
+      }
+      goColumnNames.call(this);
+    }
+    switch (this.options.rows) {
+      case 'all':
+        methodname = 'forEachNode';
+        break;
+      case 'afterfilter':
+        methodname = 'forEachNodeAfterFilter';
+        break;
+      case 'afterfilterandsort':
+      default:
+        methodname = 'forEachNodeAfterFilterAndSort';
+        break;
+    }
+    this.grid.doApi(methodname, rowTraverser.bind(this));
+    this.closeResult();
+  };
+
+  //abstractions on Exporter
+  Exporter.prototype.initResult = function () {
+    throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement initResult');
+  };
+  Exporter.prototype.startNewRow = function () {
+    throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement startNewRow');
+  };
+  Exporter.prototype.addNewCell = function (contents) {
+    throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement addNewCell');
+  };
+  Exporter.prototype.closeResult = function () {
+    throw new lib.Error('NOT_IMPLEMENTED', this.constructor.name+' has to implement closeResult');
+  };
+  //endof abstractions on Exporter
+
+  /*
+  getValue(colID, rowNode)
+  */
+
+  //statics on Exporter
+  function ctorInit () {
+    var vsblcols;
+    vsblcols = this.grid.doApi('getAllGridColumns').filter(function (col) {return col.visible});
+    this.visibleGroups = vsblcols.reduce(function(ret, col, index, cols) {
+      if (!(ret.currgrp && ret.currgrp.name == col.parent.providedColumnGroup.colGroupDef.headerName)) {
+        if(ret.currgrp) {
+          ret.ret.push(ret.currgrp);
+        }
+        ret.currgrp = {
+          name: col.parent.providedColumnGroup.colGroupDef.headerName,
+          length: 1
+        };
+      } else {
+        ret.currgrp.length++;
+      }
+      if (index >= cols.length-1) {
+        ret.ret.push(ret.currgrp);
+        ret.currgrp = null;
+      }
+      return ret;
+    }, {currgrp: null, ret: []}).ret;
+    this.visibleColumnNames = vsblcols.map(function(col) {return col.colDef.headerName});
+    this.visibleColumnIds = vsblcols.map(function(col) {return col.colId});
+  }
+  function groupNamesUsable () {
+    if (!lib.isNonEmptyArray(this.visibleGroups)) {
+      return false;
+    }
+    return this.visibleGroups.reduce(function (ret, grp) {return grp.name && grp.length>0}, false);
+  }
+  function goGroupNames () {
+    this.startNewRow();
+    this.visibleGroups.forEach(onGroupName.bind(this));
+  }
+  function onGroupName (grp) {
+    var i;
+    this.addNewCell(grp.name);
+    for (i=0; i<grp.length-1; i++) {
+      this.addNewCell();
+    }
+  }
+  function goColumnNames () {
+    this.startNewRow();
+    this.visibleColumnNames.forEach(onColumnName.bind(this));
+  }
+  function onColumnName (colname) {
+    this.addNewCell(colname);
+  }
+  function rowTraverser (rownode) {
+    if (this.options.selectedonly && !rownode.isSelected()) {
+      return;
+    }
+    this.startNewRow();
+    this.visibleColumnIds.forEach(cellTraverser.bind(this, rownode));
+    rownode = null;
+  }
+  function cellTraverser (rownode, cellid) {
+    this.addNewCell(this.grid.doApi('getValue', cellid, rownode));
+  }
+  //endof statics on Exporter
+
+  outerlib.exporters.add('base', Exporter);
+}
+module.exports = createBaseExporter;
+},{}],16:[function(require,module,exports){
+function createCsvExporter (execlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib;
+  var Base = mylib.exporters.get('base');
+
+  function CsvExporter (grid, options) {
+    Base.call(this, grid, options);
+    this.row = null;
+    this.index = null;
+  }
+  lib.inherit(CsvExporter, Base);
+  CsvExporter.prototype.destroy = function () {
+    this.index = null;
+    this.row = null;
+    Base.prototype.destroy.call(this);
+  };
+  CsvExporter.prototype.initResult = function () {
+    this.result = '';
+  };
+  CsvExporter.prototype.startNewRow = function () {
+    this.result = lib.joinStringsWith(this.result, this.row, '\n');
+    this.row = '';
+    this.index = 0;
+  };
+  CsvExporter.prototype.addNewCell = function (contents) {
+    this.index++;
+    var mycontents = lib.isVal(contents) ? contents : '';
+    if (this.index == 1) {
+      this.row = mycontents;
+      return;
+    }
+    this.row = this.row+(this.options.separator||',')+mycontents;
+  };
+  CsvExporter.prototype.closeResult = function () {
+    this.result = lib.joinStringsWith(this.result, this.row, '\n');
+  };
+
+  mylib.exporters.add('csv', CsvExporter);
+}
+module.exports = createCsvExporter;
+},{}],17:[function(require,module,exports){
+function createExcelExporter (execlib, mylib) {
+  'use strict';
+  var lib = execlib.lib;
+  var Base = mylib.exporters.get('base');
+
+  function ExcelExporter (grid, options) {
+    options.title = options.title||'My Title';
+    options.subject = options.subject||'My Subject';
+    options.author = options.author||'Me';
+    options.date = options.date||new Date();
+    options.sheet = options.sheet||'Sheet #1';
+    Base.call(this, grid, options);
+    this.aoa = null;
+    this.merges = null;
+    this.currentMerge = null;
+  }
+  lib.inherit(ExcelExporter, Base);
+  ExcelExporter.prototype.destroy = function () {
+    if(this.currentMerge) {
+      this.currentMerge.destroy();
+    }
+    this.currentMerge = null;
+    this.merges = null;
+    this.aoa = null;
+    Base.prototype.destroy.call(this);
+  };
+  ExcelExporter.prototype.initResult = function () {
+    this.aoa = [];
+    this.merges = [];
+    if(this.currentMerge) {
+      this.currentMerge.destroy();
+    }
+    this.currentMerge = null;
+  };
+  ExcelExporter.prototype.startNewRow = function () {
+    if (this.currentMerge) {
+      this.merges.push(this.currentMerge.close());
+      this.currentMerge = null;
+    }
+    this.aoa.push([]);
+  };
+  ExcelExporter.prototype.addNewCell = function (contents) {
+    if (!lib.defined(contents)) {
+      if (!this.currentMerge) {
+        this.currentMerge = new Merge(this);
+      }
+    } else {
+      if (this.currentMerge) {
+        this.merges.push(this.currentMerge.close());
+        this.currentMerge = null;
+      }
+    }
+    this.aoa[this.aoa.length-1].push(contents);
+  };
+  ExcelExporter.prototype.closeResult = function () {
+    var wb = XLSX.utils.book_new(), sheet, wbout;
+    wb.Props = {
+      Title: this.options.title,
+      Subject: this.options.subject,
+      Author: this.options.author,
+      CreatedDate: this.options.date
+    };
+    wb.SheetNames.push(this.options.sheet);
+    sheet = XLSX.utils.aoa_to_sheet(this.aoa, this.options);
+    if (lib.isNonEmptyArray(this.merges)) {
+      sheet['!merges'] = this.merges;
+    }
+    wb.Sheets[this.options.sheet] = sheet;
+    this.aoa = null;
+    wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'binary'});
+    this.result = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+  };
+
+  //helpers
+  function s2ab(s) {
+    var buf = new ArrayBuffer(s.length);
+    var view = new Uint8Array(buf);
+    for (var i=0; i<s.length; i++) view[i] = s.charCodeAt(i) & 0xFF;
+    return buf;
+  }
+  function current_aoa_cell (aoa) {
+    var rowindex = aoa.length-1;
+    var rcells = aoa[rowindex]||[];
+    return {r: rowindex, c:Math.max(rcells.length-1, 0)};
+  }
+  //endof helpers
+
+  //classes
+  function Merge (exporter) {
+    this.exporter = exporter;
+    this.start = current_aoa_cell(this.exporter.aoa);
+    this.end = null;
+  }
+  Merge.prototype.destroy = function () {
+    this.exporter = null;
+  };
+  Merge.prototype.close = function () {
+    var ret;
+    this.end = current_aoa_cell(this.exporter.aoa);
+    ret = {s: this.start, e: this.end};
+    this.destroy();
+    return ret;
+  }
+  //endof classes
+
+  mylib.exporters.add('excel', ExcelExporter);
+}
+module.exports = createExcelExporter;
+},{}],18:[function(require,module,exports){
+function createExporterFactory (execlib, outerlib) {
+  'use strict';
+
+  var lib = execlib.lib;
+
+  function ExporterFactory () {
+    lib.Map.call(this);
+  }
+  lib.inherit(ExporterFactory, lib.Map);
+  ExporterFactory.prototype.create = function (grid, options) {
+    var item, base;
+    if (!(options && options.type)) {
+      return null;
+    }
+    var item = this.get(options.type);
+    if (!lib.isFunction(item)) {
+      return item;
+    }
+    base = this.get('base');
+    if (classInheritsFrom(item, base)) {
+      return new item(grid, lib.pickExcept(options, ['type']));
+    }
+    return item(grid, options);
+  }
+
+  //helpers
+  function classInheritsFrom (klass, from) {
+    if (!(klass && klass.prototype)) {
+      return false;
+    }
+    if (klass.prototype.constructor == from) {
+      return true;
+    }
+    if (klass.prototype instanceof from) {
+      return true;
+    }
+    return false;
+  }
+  //endof helpers
+
+  return new ExporterFactory();
+}
+module.exports = createExporterFactory;
+},{}],19:[function(require,module,exports){
+function createExporters (execlib, outerlib) {
+  'use strict';
+
+  outerlib.exporters = require('./factorycreator')(execlib, outerlib);
+  require('./basecreator')(execlib, outerlib);
+  require('./csvcreator')(execlib, outerlib);
+  require('./excelcreator')(execlib, outerlib);
+}
+module.exports = createExporters;
+},{"./basecreator":15,"./csvcreator":16,"./excelcreator":17,"./factorycreator":18}],20:[function(require,module,exports){
 function createGridFields (execlib, lR, mylib) {
   'use strict';
 
@@ -1453,7 +1796,7 @@ function createGridFields (execlib, lR, mylib) {
   applib.registerElementType('EditableAgGridField', EditableAgGridFieldElement);
 }
 module.exports = createGridFields;
-},{}],16:[function(require,module,exports){
+},{}],21:[function(require,module,exports){
 function createFields (execlib, mylib) {
   'use strict';
 
@@ -1464,7 +1807,7 @@ function createFields (execlib, mylib) {
 }
 module.exports = createFields;
 
-},{"./gridcreator":15}],17:[function(require,module,exports){
+},{"./gridcreator":20}],22:[function(require,module,exports){
 function createFormatters (execlib, outerlib) {
   'use strict';
 
@@ -1479,7 +1822,7 @@ function createFormatters (execlib, outerlib) {
 }
 module.exports = createFormatters;
 
-},{"./numbercreator":18}],18:[function(require,module,exports){
+},{"./numbercreator":23}],23:[function(require,module,exports){
 function createNumberFormatters (execlib, mylib) {
   'use strict';
 
@@ -1534,7 +1877,7 @@ function createNumberFormatters (execlib, mylib) {
 }
 module.exports = createNumberFormatters;
 
-},{}],19:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 function createContextMenuableMixin (execlib, outerlib, mylib) {
   'use strict';
   var lib = execlib.lib;
@@ -1714,7 +2057,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   mylib.ContextMenuable = ContextMenuableAgGridMixin;
 }
 module.exports = createContextMenuableMixin;
-},{}],20:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 function createEditableMixin (execlib, outerlib, mylib) {
   'use strict';
 
@@ -2687,20 +3030,57 @@ function createEditableMixin (execlib, outerlib, mylib) {
   //endof setValues on editobj
 }
 module.exports = createEditableMixin;
-},{}],21:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
+function createExportableMixin (execlib, outerlib, mylib) {
+  'use strict';
+
+  var lib = execlib.lib;
+
+  function ExportableAgGridMixin (options) {
+
+  }
+  ExportableAgGridMixin.prototype.destroy = function () {
+
+  };
+  ExportableAgGridMixin.prototype.export = function (options) {
+    var exprtr = outerlib.exporters.create(this, options), result;
+    exprtr.go();
+    result = exprtr.result;
+    exprtr.destroy();
+    return result;
+  };
+
+  ExportableAgGridMixin.addMethods = function (klass) {
+    lib.inheritMethods(klass, ExportableAgGridMixin
+      , 'export'
+    )
+  };
+
+  //classes
+  //endof classes
+
+  //statics on ExportableAgGridMixin
+  
+  //endof statics on ExportableAgGridMixin
+
+  mylib.Exportable = ExportableAgGridMixin;
+}
+module.exports = createExportableMixin;
+},{}],27:[function(require,module,exports){
 function createGridMixins (execlib, outerlib) {
   'use strict';
 
   var mylib = {};
 
-  require('./editablemixincreator')(execlib, outerlib, mylib);
-  require('./contextmenuablemixincreator')(execlib, outerlib, mylib);
-  require('./tablemixincreator')(execlib, outerlib, mylib);
+  require('./editablecreator')(execlib, outerlib, mylib);
+  require('./contextmenuablecreator')(execlib, outerlib, mylib);
+  require('./tablecreator')(execlib, outerlib, mylib);
+  require('./exportablecreator')(execlib, outerlib, mylib);
 
   outerlib.gridmixins = mylib;
 }
 module.exports = createGridMixins;
-},{"./contextmenuablemixincreator":19,"./editablemixincreator":20,"./tablemixincreator":22}],22:[function(require,module,exports){
+},{"./contextmenuablecreator":24,"./editablecreator":25,"./exportablecreator":26,"./tablecreator":28}],28:[function(require,module,exports){
 function createTableGridMixin (execlib, outerlib, mylib) {
   'use strict';
 
@@ -2763,7 +3143,7 @@ function createTableGridMixin (execlib, outerlib, mylib) {
   mylib.Table = TableAgGridMixin;
 }
 module.exports = createTableGridMixin;
-},{}],23:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
@@ -2777,13 +3157,14 @@ module.exports = createTableGridMixin;
   require('./formatters')(execlib, mylib);
   require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
+  require('./exporters')(execlib, mylib);
   require('./elements')(execlib, mylib);
   require('./fields')(execlib, mylib);
 
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./editors":5,"./elements":14,"./fields":16,"./formatters":17,"./gridmixins":21,"./jobs":25,"./parsers":26,"./utils":30}],24:[function(require,module,exports){
+},{"./editors":5,"./elements":14,"./exporters":19,"./fields":21,"./formatters":22,"./gridmixins":27,"./jobs":31,"./parsers":32,"./utils":36}],30:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -2855,7 +3236,7 @@ function createCellUpdaterJob (execlib, mylib) {
   mylib.CellUpdater = CellUpdaterJob;
 }
 module.exports = createCellUpdaterJob;
-},{}],25:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 function createJobs (execlib) {
   'use strict';
 
@@ -2866,7 +3247,7 @@ function createJobs (execlib) {
   return mylib;
 }
 module.exports = createJobs;
-},{"./cellupdatercreator":24}],26:[function(require,module,exports){
+},{"./cellupdatercreator":30}],32:[function(require,module,exports){
 function createParsers (execlib, outerlib) {
   'use strict';
 
@@ -2881,7 +3262,7 @@ function createParsers (execlib, outerlib) {
 }
 module.exports = createParsers;
 
-},{"./numbercreator":27}],27:[function(require,module,exports){
+},{"./numbercreator":33}],33:[function(require,module,exports){
 function createNumberParsers (execlib, mylib) {
   'use strict';
 
@@ -2933,7 +3314,7 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}],28:[function(require,module,exports){
+},{}],34:[function(require,module,exports){
 function createBlankRowFunctionality (lib, mylib) {
   'use strict';
 
@@ -3112,7 +3493,7 @@ function createBlankRowFunctionality (lib, mylib) {
   mylib.BlankRowController = BlankRowController;
 }
 module.exports = createBlankRowFunctionality;
-},{}],29:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 function createColumnDefUtils (lib, outerlib) {
   'use strict';
 
@@ -3221,7 +3602,7 @@ function createColumnDefUtils (lib, outerlib) {
   outerlib.columnDef = mylib;
 }
 module.exports = createColumnDefUtils;
-},{}],30:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 function createUtils (lib) {
   'use strict';
 
@@ -3233,7 +3614,7 @@ function createUtils (lib) {
   return mylib;
 }
 module.exports = createUtils;
-},{"./blankrowfunctionalitycreator":28,"./columndefutilscreator":29,"./validitymonitorcreator":31}],31:[function(require,module,exports){
+},{"./blankrowfunctionalitycreator":34,"./columndefutilscreator":35,"./validitymonitorcreator":37}],37:[function(require,module,exports){
 function createValidityMonitor (lib, outerlib) {
   'use strict';
 
@@ -3297,4 +3678,4 @@ function createValidityMonitor (lib, outerlib) {
   outerlib.ValidityMonitor = ValidityMonitor;
 }
 module.exports = createValidityMonitor;
-},{}]},{},[23]);
+},{}]},{},[29]);

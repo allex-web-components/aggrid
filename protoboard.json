@@ -16,7 +16,8 @@
 	"additionaltargets": {
     "js": [
       ["dist", "ag-grid-community.min.js"],
-      ["dist", "ag-charts-community.min.js"]
+      ["dist", "ag-charts-community.min.js"],
+      ["dist", "xlsx.full.min.js"]
     ],
     "css": [
       ["dist", "ag-theme-balham.min.css"],

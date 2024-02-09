@@ -3,9 +3,10 @@ function createGridMixins (execlib, outerlib) {
 
   var mylib = {};
 
-  require('./editablemixincreator')(execlib, outerlib, mylib);
-  require('./contextmenuablemixincreator')(execlib, outerlib, mylib);
-  require('./tablemixincreator')(execlib, outerlib, mylib);
+  require('./editablecreator')(execlib, outerlib, mylib);
+  require('./contextmenuablecreator')(execlib, outerlib, mylib);
+  require('./tablecreator')(execlib, outerlib, mylib);
+  require('./exportablecreator')(execlib, outerlib, mylib);
 
   outerlib.gridmixins = mylib;
 }

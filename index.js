@@ -11,6 +11,7 @@
   require('./formatters')(execlib, mylib);
   require('./editors')(execlib, mylib);
   require('./parsers')(execlib, mylib);
+  require('./exporters')(execlib, mylib);
   require('./elements')(execlib, mylib);
   require('./fields')(execlib, mylib);
 
