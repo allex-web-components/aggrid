@@ -27,7 +27,13 @@ function createTableGridMixin (execlib, outerlib, mylib) {
     return this.findRowAndIndexByPropVal(this.primaryKey, val);
   };
 
+  var zeroString = String.fromCharCode(0);
   TableAgGridMixin.prototype.onGetRowIdForTable = function (params) {
+    if (lib.isArray(this.primaryKey)) {
+      //return this.primaryKey.reduce(numpkrowider, {data: params.data, ret: 0}).ret;
+      //return this.primaryKey.reduce(pkrowider, {data: params.data, ret: []}).ret.join('\t');
+      return this.primaryKey.reduce(pkrowider, {data: params.data, ret: ''}).ret;
+    }
     return params.data[this.primaryKey];
   };
   TableAgGridMixin.prototype.onPostSort = function (params) {
@@ -58,5 +64,22 @@ function createTableGridMixin (execlib, outerlib, mylib) {
   };
 
   mylib.Table = TableAgGridMixin;
+
+  //statics on TableAgGridMixin  
+  //endof statics on TableAgGridMixin
+
+  //helpers
+  function pkrowider (ret, pkkeyname) {
+    if (!lib.isString(ret.ret)) {
+      return ret;
+    }
+    if (!(pkkeyname in ret.data)) {
+      ret.ret = void 0;
+      return ret;
+    }
+    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', zeroString);
+    return ret;
+  }
+  //endof helpers
 }
 module.exports = createTableGridMixin;

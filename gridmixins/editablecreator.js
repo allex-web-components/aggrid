@@ -169,6 +169,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!this.cellEdited) {
       return;
     }
+    if (!(params && lib.isNumber(params.rowIndex))) {
+      return;
+    }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;    
     params.setValues = setValues.bind(params);
@@ -547,7 +550,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return lib.isEqual(first, lib.pick(second, fks));
   }
   EditableAgGridMixin.prototype.updateRowByPropValSync = function (propname, propval, data) {
-    console.log('pre updateRowByPropValSync', this.get('data').slice());
     var recNindex = this.findRowAndIndexByPropVal(propname, propval);
     if (!(recNindex && recNindex.element)) {
       return;
@@ -558,14 +560,18 @@ function createEditableMixin (execlib, outerlib, mylib) {
     );
   };
   EditableAgGridMixin.prototype.upsertRowByPropValSync = function (propname, propval, data) {
-    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval);
-    if (!(recNindex && recNindex.element)) {
-      if (lib.isNumber(recNindex.insertafter)) {
-        this.insertRow(data, recNindex.insertafter);
+    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval), ia;
+    if (!recNindex) {
+      return;
+    }
+    if (!recNindex.element) {
+      //if (lib.isNumber(recNindex.insertafter)) {
+        ia = lib.isNumber(recNindex.insertafter) ? recNindex.insertafter : -1;
+        this.insertRow(data, ia);
         if (this.blankRowController.hasPropertyValue(propname, propval)) {
           this.blankRowController.emptyRow();
         }
-      }
+      //}
       return;
     }
     if (secondHasTheSameValuesAsFirst(data, recNindex.element)) {

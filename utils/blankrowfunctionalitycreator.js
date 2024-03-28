@@ -129,15 +129,63 @@ function createBlankRowFunctionality (lib, mylib) {
     }
     return this.rowNode.data[propname] == propval;
   };
-  BlankRowController.prototype.prepareForInsert = function () {
+  function recHasPK (rec, pk) {
+    var ret;
+    if (!rec) {
+      return false;
+    }
+    if (lib.isArray(pk)) {
+      ret = pk.every(recHasPK.bind(null, rec));
+      rec = null;
+      return ret;
+    }
+    return pk in rec;
+  }
+  function setPkInRec (rec, value, pk) {
+    if (!rec) {
+      return;
+    }
+    if (lib.isArray(pk)) {
+      pk.forEach(setPkInRec.bind(null, rec, value));
+      rec = null;
+      value = null;
+      return;
+    }
+    rec[pk] = value;
+  }
+  function equalPkValues (rec1, rec2, pk) {
+    var ret;
+    if (!rec1) {
+      return false;
+    }
+    if (!rec2) {
+      return false;
+    }
+    if (lib.isArray(pk)) {
+      ret = pk.every(equalPkValues.bind(null, rec1, rec2));
+      rec1 = null;
+      rec2 = null;
+      return ret;
+    }
+    return rec1[pk] == rec2[pk];
+  }
+  BlankRowController.prototype.prepareForInsert = function (row) {
     var pk, rec;
     if (!this.grid) return;
     if (!this.rowNode) return;
     pk = this.grid.primaryKey;
     rec = this.rowNode.data;
-    if (pk && !(pk in rec)) {
-      this.hadPreInsertIntervention = true;
-      rec[pk] = '';
+    if (pk) {
+      if (!recHasPK(rec, pk)) {
+        this.hadPreInsertIntervention = true;
+        setPkInRec(rec, '', pk);
+        return;
+      }
+      /*
+      if (equalPkValues(rec, row, pk)) {
+        this.emptyRow();
+      }
+      */
     }
   }
   BlankRowController.prototype.ackInsertedRow = function (row) {
@@ -148,9 +196,9 @@ function createBlankRowFunctionality (lib, mylib) {
     rec = this.rowNode.data;
     if (pk) {
       if (this.hadPreInsertIntervention) {
-        rec[pk] = null;
+        setPkInRec(rec, null, pk);
       }
-      if (rec[pk] == row[pk]) {
+      if (equalPkValues(rec, row, pk) /*rec[pk] == row[pk]*/) {
         this.emptyRow();
       }
       return;

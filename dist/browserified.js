@@ -270,6 +270,9 @@ function createAllexUniqueEditor (execlib, lR, o, m, outerlib, mylib) {
     }
   };
   AllexInputBaseEditor.prototype.onValueChanged = function (newval, oldval) {
+    if (!this.initParams) {
+      return;
+    }
     this.valid = true;
     validationProc.call(this, this.initParams.validations, newval, oldval);
     if (!this.valid) {
@@ -1068,15 +1071,16 @@ function createGrid (execlib, applib, mylib) {
     return this.doApi('applyTransaction', {add: [rec]}).add[0];
   };
   AgGridElement.prototype.insertRow = function (rec, afterindex) {
-    console.log('insertRow', afterindex);
     var data;
     data = (this.get('data')||[]).slice();
     data.splice((afterindex||0)+1, 0, rec);
     this.data = data;
-    this.blankRowController.prepareForInsert();
-    this.doApi('setGridOption', 'rowData', data);
+    this.blankRowController.prepareForInsert(rec);
+    //console.log('new data', data);
+    //this.doApi('setGridOption', 'rowData', data);
+    this.doApi('applyTransaction', {add: [rec], addIndex: (afterindex||0)+1});
     this.blankRowController.ackInsertedRow(rec);
-    this.refresh();
+    this.refreshCells();
     //lib.runNext(this.refresh.bind(this));
   };
   AgGridElement.prototype.removeRow = function (rec, atindex) {
@@ -2246,6 +2250,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!this.cellEdited) {
       return;
     }
+    if (!(params && lib.isNumber(params.rowIndex))) {
+      return;
+    }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;    
     params.setValues = setValues.bind(params);
@@ -2624,7 +2631,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return lib.isEqual(first, lib.pick(second, fks));
   }
   EditableAgGridMixin.prototype.updateRowByPropValSync = function (propname, propval, data) {
-    console.log('pre updateRowByPropValSync', this.get('data').slice());
     var recNindex = this.findRowAndIndexByPropVal(propname, propval);
     if (!(recNindex && recNindex.element)) {
       return;
@@ -2635,14 +2641,18 @@ function createEditableMixin (execlib, outerlib, mylib) {
     );
   };
   EditableAgGridMixin.prototype.upsertRowByPropValSync = function (propname, propval, data) {
-    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval);
-    if (!(recNindex && recNindex.element)) {
-      if (lib.isNumber(recNindex.insertafter)) {
-        this.insertRow(data, recNindex.insertafter);
+    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval), ia;
+    if (!recNindex) {
+      return;
+    }
+    if (!recNindex.element) {
+      //if (lib.isNumber(recNindex.insertafter)) {
+        ia = lib.isNumber(recNindex.insertafter) ? recNindex.insertafter : -1;
+        this.insertRow(data, ia);
         if (this.blankRowController.hasPropertyValue(propname, propval)) {
           this.blankRowController.emptyRow();
         }
-      }
+      //}
       return;
     }
     if (secondHasTheSameValuesAsFirst(data, recNindex.element)) {
@@ -3126,7 +3136,13 @@ function createTableGridMixin (execlib, outerlib, mylib) {
     return this.findRowAndIndexByPropVal(this.primaryKey, val);
   };
 
+  var zeroString = String.fromCharCode(0);
   TableAgGridMixin.prototype.onGetRowIdForTable = function (params) {
+    if (lib.isArray(this.primaryKey)) {
+      //return this.primaryKey.reduce(numpkrowider, {data: params.data, ret: 0}).ret;
+      //return this.primaryKey.reduce(pkrowider, {data: params.data, ret: []}).ret.join('\t');
+      return this.primaryKey.reduce(pkrowider, {data: params.data, ret: ''}).ret;
+    }
     return params.data[this.primaryKey];
   };
   TableAgGridMixin.prototype.onPostSort = function (params) {
@@ -3157,6 +3173,23 @@ function createTableGridMixin (execlib, outerlib, mylib) {
   };
 
   mylib.Table = TableAgGridMixin;
+
+  //statics on TableAgGridMixin  
+  //endof statics on TableAgGridMixin
+
+  //helpers
+  function pkrowider (ret, pkkeyname) {
+    if (!lib.isString(ret.ret)) {
+      return ret;
+    }
+    if (!(pkkeyname in ret.data)) {
+      ret.ret = void 0;
+      return ret;
+    }
+    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', zeroString);
+    return ret;
+  }
+  //endof helpers
 }
 module.exports = createTableGridMixin;
 },{}],29:[function(require,module,exports){
@@ -3462,15 +3495,63 @@ function createBlankRowFunctionality (lib, mylib) {
     }
     return this.rowNode.data[propname] == propval;
   };
-  BlankRowController.prototype.prepareForInsert = function () {
+  function recHasPK (rec, pk) {
+    var ret;
+    if (!rec) {
+      return false;
+    }
+    if (lib.isArray(pk)) {
+      ret = pk.every(recHasPK.bind(null, rec));
+      rec = null;
+      return ret;
+    }
+    return pk in rec;
+  }
+  function setPkInRec (rec, value, pk) {
+    if (!rec) {
+      return;
+    }
+    if (lib.isArray(pk)) {
+      pk.forEach(setPkInRec.bind(null, rec, value));
+      rec = null;
+      value = null;
+      return;
+    }
+    rec[pk] = value;
+  }
+  function equalPkValues (rec1, rec2, pk) {
+    var ret;
+    if (!rec1) {
+      return false;
+    }
+    if (!rec2) {
+      return false;
+    }
+    if (lib.isArray(pk)) {
+      ret = pk.every(equalPkValues.bind(null, rec1, rec2));
+      rec1 = null;
+      rec2 = null;
+      return ret;
+    }
+    return rec1[pk] == rec2[pk];
+  }
+  BlankRowController.prototype.prepareForInsert = function (row) {
     var pk, rec;
     if (!this.grid) return;
     if (!this.rowNode) return;
     pk = this.grid.primaryKey;
     rec = this.rowNode.data;
-    if (pk && !(pk in rec)) {
-      this.hadPreInsertIntervention = true;
-      rec[pk] = '';
+    if (pk) {
+      if (!recHasPK(rec, pk)) {
+        this.hadPreInsertIntervention = true;
+        setPkInRec(rec, '', pk);
+        return;
+      }
+      /*
+      if (equalPkValues(rec, row, pk)) {
+        this.emptyRow();
+      }
+      */
     }
   }
   BlankRowController.prototype.ackInsertedRow = function (row) {
@@ -3481,9 +3562,9 @@ function createBlankRowFunctionality (lib, mylib) {
     rec = this.rowNode.data;
     if (pk) {
       if (this.hadPreInsertIntervention) {
-        rec[pk] = null;
+        setPkInRec(rec, null, pk);
       }
-      if (rec[pk] == row[pk]) {
+      if (equalPkValues(rec, row, pk) /*rec[pk] == row[pk]*/) {
         this.emptyRow();
       }
       return;
