@@ -216,15 +216,16 @@ function createGrid (execlib, applib, mylib) {
     return this.doApi('applyTransaction', {add: [rec]}).add[0];
   };
   AgGridElement.prototype.insertRow = function (rec, afterindex) {
-    console.log('insertRow', afterindex);
     var data;
     data = (this.get('data')||[]).slice();
     data.splice((afterindex||0)+1, 0, rec);
     this.data = data;
-    this.blankRowController.prepareForInsert();
-    this.doApi('setGridOption', 'rowData', data);
+    this.blankRowController.prepareForInsert(rec);
+    //console.log('new data', data);
+    //this.doApi('setGridOption', 'rowData', data);
+    this.doApi('applyTransaction', {add: [rec], addIndex: (afterindex||0)+1});
     this.blankRowController.ackInsertedRow(rec);
-    this.refresh();
+    this.refreshCells();
     //lib.runNext(this.refresh.bind(this));
   };
   AgGridElement.prototype.removeRow = function (rec, atindex) {

@@ -169,6 +169,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!this.cellEdited) {
       return;
     }
+    if (!(params && lib.isNumber(params.rowIndex))) {
+      return;
+    }
     pk = this.primaryKey;
     params.inBatchEdit = this.inBatchEdit;    
     params.setValues = setValues.bind(params);
@@ -493,15 +496,11 @@ function createEditableMixin (execlib, outerlib, mylib) {
 
   
   EditableAgGridMixin.prototype.updateRowSync = function (index, record) {
-    var rownode, aggridopts, coldefs, oldrec, oldrec4update, prop, coldef;
+    var rownode, coldefs, oldrec, oldrec4update, prop, coldef;
     var pk, pkfound, find4pk;
     pk = this.primaryKey;
     rownode = this.rowNodeForIndexOrRecord(index, record);
     if (!rownode) {
-      return;
-    }
-    aggridopts = this.getConfigVal('aggrid');
-    if (!aggridopts) {
       return;
     }
     coldefs = this.deepCopyColumnDefs();
@@ -534,7 +533,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
         rowIndex: index,
         node: rownode,
         data: oldrec4update,
-        api: aggridopts.api
+        api: this.gridApi
       });
       /**/
     }
@@ -548,7 +547,6 @@ function createEditableMixin (execlib, outerlib, mylib) {
     return lib.isEqual(first, lib.pick(second, fks));
   }
   EditableAgGridMixin.prototype.updateRowByPropValSync = function (propname, propval, data) {
-    console.log('pre updateRowByPropValSync', this.get('data').slice());
     var recNindex = this.findRowAndIndexByPropVal(propname, propval);
     if (!(recNindex && recNindex.element)) {
       return;
@@ -559,14 +557,18 @@ function createEditableMixin (execlib, outerlib, mylib) {
     );
   };
   EditableAgGridMixin.prototype.upsertRowByPropValSync = function (propname, propval, data) {
-    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval);
-    if (!(recNindex && recNindex.element)) {
-      if (lib.isNumber(recNindex.insertafter)) {
-        this.insertRow(data, recNindex.insertafter);
+    var recNindex = this.findRowIndexAndInsertIndexByPropVal(propname, propval), ia;
+    if (!recNindex) {
+      return;
+    }
+    if (!recNindex.element) {
+      //if (lib.isNumber(recNindex.insertafter)) {
+        ia = lib.isNumber(recNindex.insertafter) ? recNindex.insertafter : -1;
+        this.insertRow(data, ia);
         if (this.blankRowController.hasPropertyValue(propname, propval)) {
           this.blankRowController.emptyRow();
         }
-      }
+      //}
       return;
     }
     if (secondHasTheSameValuesAsFirst(data, recNindex.element)) {
