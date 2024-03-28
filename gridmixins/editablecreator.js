@@ -493,15 +493,14 @@ function createEditableMixin (execlib, outerlib, mylib) {
 
   
   EditableAgGridMixin.prototype.updateRowSync = function (index, record) {
-    var rownode, aggridopts, coldefs, oldrec, oldrec4update, prop, coldef;
+    var rownode, coldefs, oldrec, oldrec4update, prop, coldef;
     var pk, pkfound, find4pk;
     pk = this.primaryKey;
     rownode = this.rowNodeForIndexOrRecord(index, record);
     if (!rownode) {
       return;
     }
-    aggridopts = this.getConfigVal('aggrid');
-    if (!aggridopts) {
+    if (!this.gridApi) {
       return;
     }
     coldefs = this.deepCopyColumnDefs();
@@ -534,7 +533,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
         rowIndex: index,
         node: rownode,
         data: oldrec4update,
-        api: aggridopts.api
+        api: this.gridApi
       });
       /**/
     }
