@@ -3186,7 +3186,7 @@ function createTableGridMixin (execlib, outerlib, mylib) {
       ret.ret = void 0;
       return ret;
     }
-    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', zeroString);
+    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', '_'/*zeroString*/);
     return ret;
   }
   //endof helpers
@@ -3536,6 +3536,7 @@ function createBlankRowFunctionality (lib, mylib) {
     return rec1[pk] == rec2[pk];
   }
   BlankRowController.prototype.prepareForInsert = function (row) {
+    return;
     var pk, rec;
     if (!this.grid) return;
     if (!this.rowNode) return;

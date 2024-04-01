@@ -77,7 +77,7 @@ function createTableGridMixin (execlib, outerlib, mylib) {
       ret.ret = void 0;
       return ret;
     }
-    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', zeroString);
+    ret.ret = lib.joinStringsWith(ret.ret, ret.data[pkkeyname]+'', '_'/*zeroString*/);
     return ret;
   }
   //endof helpers

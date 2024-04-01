@@ -170,6 +170,7 @@ function createBlankRowFunctionality (lib, mylib) {
     return rec1[pk] == rec2[pk];
   }
   BlankRowController.prototype.prepareForInsert = function (row) {
+    return;
     var pk, rec;
     if (!this.grid) return;
     if (!this.rowNode) return;
