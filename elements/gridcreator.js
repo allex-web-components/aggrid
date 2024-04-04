@@ -17,6 +17,7 @@ function createGrid (execlib, applib, mylib) {
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
     mylib.gridmixins.Exportable.call(this, options);
+    mylib.gridmixins.Themable.call(this, options);
     this.data = [];
     this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
@@ -31,6 +32,7 @@ function createGrid (execlib, applib, mylib) {
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   mylib.gridmixins.Exportable.addMethods(AgGridElement);
+  mylib.gridmixins.Themable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
     this.valid = null;
     this.selectedRows = null;
@@ -66,6 +68,7 @@ function createGrid (execlib, applib, mylib) {
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
+    mylib.gridmixins.Themable.prototype.destroy.call(this);
     mylib.gridmixins.Exportable.prototype.destroy.call(this);
     mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
@@ -103,6 +106,13 @@ function createGrid (execlib, applib, mylib) {
       this.set('data', this.getConfigVal('data'));
       */
     }
+  };
+  AgGridElement.prototype.staticEnvironmentDescriptor = function (myname) {
+    return lib.extendWithConcat(
+      WebElement.prototype.staticEnvironmentDescriptor.call(this, myname)||{},
+      mylib.gridmixins.Themable.prototype.staticEnvironmentDescriptor.call(this, myname),
+      {}
+    );
   };
   /*
   function freezer (obj) {

@@ -7,6 +7,7 @@ function createGridMixins (execlib, outerlib) {
   require('./contextmenuablecreator')(execlib, outerlib, mylib);
   require('./tablecreator')(execlib, outerlib, mylib);
   require('./exportablecreator')(execlib, outerlib, mylib);
+  require('./themablecreator')(execlib, outerlib, mylib);
 
   outerlib.gridmixins = mylib;
 }

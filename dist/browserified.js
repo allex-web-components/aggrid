@@ -872,6 +872,7 @@ function createGrid (execlib, applib, mylib) {
     WebElement.call(this, id, options);
     mylib.gridmixins.ContextMenuable.call(this, options);
     mylib.gridmixins.Exportable.call(this, options);
+    mylib.gridmixins.Themable.call(this, options);
     this.data = [];
     this.blankRowController = new mylib.utils.BlankRowController(this, options.blankRow);
     this.selections = new lib.Map();
@@ -886,6 +887,7 @@ function createGrid (execlib, applib, mylib) {
   lib.inherit(AgGridElement, WebElement);
   mylib.gridmixins.ContextMenuable.addMethods(AgGridElement);
   mylib.gridmixins.Exportable.addMethods(AgGridElement);
+  mylib.gridmixins.Themable.addMethods(AgGridElement);
   AgGridElement.prototype.__cleanUp = function () {
     this.valid = null;
     this.selectedRows = null;
@@ -921,6 +923,7 @@ function createGrid (execlib, applib, mylib) {
     if (this.getConfigVal('aggrid') && lib.isFunction(this.getConfigVal('aggrid').destroy)) {
       this.getConfigVal('aggrid').destroy();
     }
+    mylib.gridmixins.Themable.prototype.destroy.call(this);
     mylib.gridmixins.Exportable.prototype.destroy.call(this);
     mylib.gridmixins.ContextMenuable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
@@ -958,6 +961,13 @@ function createGrid (execlib, applib, mylib) {
       this.set('data', this.getConfigVal('data'));
       */
     }
+  };
+  AgGridElement.prototype.staticEnvironmentDescriptor = function (myname) {
+    return lib.extendWithConcat(
+      WebElement.prototype.staticEnvironmentDescriptor.call(this, myname)||{},
+      mylib.gridmixins.Themable.prototype.staticEnvironmentDescriptor.call(this, myname),
+      {}
+    );
   };
   /*
   function freezer (obj) {
@@ -3102,11 +3112,12 @@ function createGridMixins (execlib, outerlib) {
   require('./contextmenuablecreator')(execlib, outerlib, mylib);
   require('./tablecreator')(execlib, outerlib, mylib);
   require('./exportablecreator')(execlib, outerlib, mylib);
+  require('./themablecreator')(execlib, outerlib, mylib);
 
   outerlib.gridmixins = mylib;
 }
 module.exports = createGridMixins;
-},{"./contextmenuablecreator":24,"./editablecreator":25,"./exportablecreator":26,"./tablecreator":28}],28:[function(require,module,exports){
+},{"./contextmenuablecreator":24,"./editablecreator":25,"./exportablecreator":26,"./tablecreator":28,"./themablecreator":29}],28:[function(require,module,exports){
 function createTableGridMixin (execlib, outerlib, mylib) {
   'use strict';
 
@@ -3193,6 +3204,53 @@ function createTableGridMixin (execlib, outerlib, mylib) {
 }
 module.exports = createTableGridMixin;
 },{}],29:[function(require,module,exports){
+function createThemableMixin (execlib, outerlib, mylib) {
+  'use strict';
+
+  function ThemableMixin (options) {
+
+  }
+  ThemableMixin.prototype.destroy = function () {
+
+  };
+  ThemableMixin.prototype.staticEnvironmentDescriptor = function (myname) {
+    var pathtotheming = this.getConfigVal('themingpath');
+    if (!pathtotheming) {
+      return;
+    }
+    return {
+      logic: [{
+        triggers: 'element.'+pathtotheming+':theme',
+        handler: onTheme.bind(this)
+      }]
+    }
+  };
+
+  ThemableMixin.addMethods = function (klass) {
+
+  };
+
+  mylib.Themable = ThemableMixin;
+
+  //statics
+  function onTheme (theme) {
+    var dark;
+    if (!(this.$element && this.$element.length)) {
+      return;
+    }
+    dark = theme=='dark';
+    if (dark) {
+      this.$element.removeClass('ag-theme-balham');
+      this.$element.addClass('ag-theme-balham-dark');
+      return;
+    }
+    this.$element.removeClass('ag-theme-balham-dark');
+    this.$element.addClass('ag-theme-balham');
+}
+  //endof statics
+}
+module.exports = createThemableMixin;
+},{}],30:[function(require,module,exports){
 (function (execlib) {
   'use strict';
 
@@ -3213,7 +3271,7 @@ module.exports = createTableGridMixin;
   execlib.execSuite.libRegistry.register('allex_aggridwebcomponent', mylib);
 })(ALLEX);
 
-},{"./editors":5,"./elements":14,"./exporters":19,"./fields":21,"./formatters":22,"./gridmixins":27,"./jobs":31,"./parsers":32,"./utils":36}],30:[function(require,module,exports){
+},{"./editors":5,"./elements":14,"./exporters":19,"./fields":21,"./formatters":22,"./gridmixins":27,"./jobs":32,"./parsers":33,"./utils":37}],31:[function(require,module,exports){
 function createCellUpdaterJob (execlib, mylib) {
   'use strict';
 
@@ -3285,7 +3343,7 @@ function createCellUpdaterJob (execlib, mylib) {
   mylib.CellUpdater = CellUpdaterJob;
 }
 module.exports = createCellUpdaterJob;
-},{}],31:[function(require,module,exports){
+},{}],32:[function(require,module,exports){
 function createJobs (execlib) {
   'use strict';
 
@@ -3296,7 +3354,7 @@ function createJobs (execlib) {
   return mylib;
 }
 module.exports = createJobs;
-},{"./cellupdatercreator":30}],32:[function(require,module,exports){
+},{"./cellupdatercreator":31}],33:[function(require,module,exports){
 function createParsers (execlib, outerlib) {
   'use strict';
 
@@ -3311,7 +3369,7 @@ function createParsers (execlib, outerlib) {
 }
 module.exports = createParsers;
 
-},{"./numbercreator":33}],33:[function(require,module,exports){
+},{"./numbercreator":34}],34:[function(require,module,exports){
 function createNumberParsers (execlib, mylib) {
   'use strict';
 
@@ -3363,7 +3421,7 @@ function createNumberParsers (execlib, mylib) {
 }
 module.exports = createNumberParsers;
 
-},{}],34:[function(require,module,exports){
+},{}],35:[function(require,module,exports){
 function createBlankRowFunctionality (lib, mylib) {
   'use strict';
 
@@ -3591,7 +3649,7 @@ function createBlankRowFunctionality (lib, mylib) {
   mylib.BlankRowController = BlankRowController;
 }
 module.exports = createBlankRowFunctionality;
-},{}],35:[function(require,module,exports){
+},{}],36:[function(require,module,exports){
 function createColumnDefUtils (lib, outerlib) {
   'use strict';
 
@@ -3700,7 +3758,7 @@ function createColumnDefUtils (lib, outerlib) {
   outerlib.columnDef = mylib;
 }
 module.exports = createColumnDefUtils;
-},{}],36:[function(require,module,exports){
+},{}],37:[function(require,module,exports){
 function createUtils (lib) {
   'use strict';
 
@@ -3712,7 +3770,7 @@ function createUtils (lib) {
   return mylib;
 }
 module.exports = createUtils;
-},{"./blankrowfunctionalitycreator":34,"./columndefutilscreator":35,"./validitymonitorcreator":37}],37:[function(require,module,exports){
+},{"./blankrowfunctionalitycreator":35,"./columndefutilscreator":36,"./validitymonitorcreator":38}],38:[function(require,module,exports){
 function createValidityMonitor (lib, outerlib) {
   'use strict';
 
@@ -3776,4 +3834,4 @@ function createValidityMonitor (lib, outerlib) {
   outerlib.ValidityMonitor = ValidityMonitor;
 }
 module.exports = createValidityMonitor;
-},{}]},{},[29]);
+},{}]},{},[30]);
