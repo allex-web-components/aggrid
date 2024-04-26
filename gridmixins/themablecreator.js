@@ -26,21 +26,49 @@ function createThemableMixin (execlib, outerlib, mylib) {
 
   mylib.Themable = ThemableMixin;
 
+  //data
+  var _possibleClasses = [
+    'ag-theme-balham',
+    'ag-default',
+    'ag-sheets',
+    'ag-polychroma',
+    'ag-vivid',
+    'ag-material'
+  ];
+  var _possibleClassesDark = _possibleClasses.map(function (klass) {return klass+'-dark';});
+  //endof data
+
   //statics
   function onTheme (theme) {
-    var dark;
+    var dark, themeindex;
     if (!(this.$element && this.$element.length)) {
       return;
     }
     dark = theme=='dark';
-    if (dark) {
-      this.$element.removeClass('ag-theme-balham');
-      this.$element.addClass('ag-theme-balham-dark');
+    themeindex = baseThemeIndex.call(this, dark);
+    if (themeindex<0) {
       return;
     }
-    this.$element.removeClass('ag-theme-balham-dark');
-    this.$element.addClass('ag-theme-balham');
-}
+    if (dark) {
+      this.respondToThemeChange(_possibleClasses[themeindex], _possibleClassesDark[themeindex]);
+      return;
+    }
+    this.respondToThemeChange(_possibleClassesDark[themeindex], _possibleClasses[themeindex]);
+  }
+  function baseThemeIndex (dark) {
+    var clss, ind;
+    if (!(this.$element && this.$element.length>0)) {
+      return -1;
+    }
+    clss = (dark ? _possibleClasses : _possibleClassesDark); //the inverse of current class settings
+    for (const cls of this.$element[0].classList.values()) {
+      ind = clss.indexOf(cls);
+      if (ind>=0) {
+        return ind;
+      }
+    }
+    return -1;
+  }
   //endof statics
 }
 module.exports = createThemableMixin;

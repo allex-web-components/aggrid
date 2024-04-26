@@ -433,14 +433,17 @@ function createChart (execlib, applib, mylib) {
 
   function AgChartElement (id, options) {
     WebElement.call(this, id, options);
+    mylib.gridmixins.Themable.call(this, options);
     this.data = null;
     this.chartOpts = null;
     this.chart = null;
   }
   lib.inherit(AgChartElement, WebElement);
+  mylib.gridmixins.Themable.addMethods(AgChartElement);
   AgChartElement.prototype.__cleanUp = function () {
     this.chartOpts = null;
     this.data = null;
+    mylib.gridmixins.Themable.prototype.destroy.call(this);
     WebElement.prototype.__cleanUp.call(this);
   };
   AgChartElement.prototype.doThejQueryCreation = function () {
@@ -455,6 +458,13 @@ function createChart (execlib, applib, mylib) {
       this.chart = agCharts.AgChart.create(this.chartOpts);
       //this.set('data', this.getConfigVal('data'));
     }
+  };
+  AgChartElement.prototype.staticEnvironmentDescriptor = function (myname) {
+    return lib.extendWithConcat(
+      WebElement.prototype.staticEnvironmentDescriptor.call(this, myname)||{},
+      mylib.gridmixins.Themable.prototype.staticEnvironmentDescriptor.call(this, myname),
+      {}
+    );
   };
   AgChartElement.prototype.set_data = function (data) {
     var agchartopts;
@@ -491,6 +501,13 @@ function createChart (execlib, applib, mylib) {
   };
   AgChartElement.prototype.apiUpdate = function () {
     agCharts.AgChart.update(this.chart, this.chartOpts);
+  };
+
+  AgChartElement.prototype.respondToThemeChange = function (oldtheme, newtheme) {
+    this.$element.removeClass(oldtheme);
+    this.$element.addClass(newtheme);
+    this.chartOpts.theme = newtheme;
+    this.apiUpdate();
   };
 
   applib.registerElementType('AgChart', AgChartElement);
@@ -1358,7 +1375,10 @@ function createGrid (execlib, applib, mylib) {
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
 
-
+  AgGridElement.prototype.respondToThemeChange = function (oldtheme, newtheme) {
+    this.$element.removeClass(oldtheme);
+    this.$element.addClass(newtheme);
+  };
 
   applib.registerElementType('AgGrid', AgGridElement);
 
@@ -3232,21 +3252,49 @@ function createThemableMixin (execlib, outerlib, mylib) {
 
   mylib.Themable = ThemableMixin;
 
+  //data
+  var _possibleClasses = [
+    'ag-theme-balham',
+    'ag-default',
+    'ag-sheets',
+    'ag-polychroma',
+    'ag-vivid',
+    'ag-material'
+  ];
+  var _possibleClassesDark = _possibleClasses.map(function (klass) {return klass+'-dark';});
+  //endof data
+
   //statics
   function onTheme (theme) {
-    var dark;
+    var dark, themeindex;
     if (!(this.$element && this.$element.length)) {
       return;
     }
     dark = theme=='dark';
-    if (dark) {
-      this.$element.removeClass('ag-theme-balham');
-      this.$element.addClass('ag-theme-balham-dark');
+    themeindex = baseThemeIndex.call(this, dark);
+    if (themeindex<0) {
       return;
     }
-    this.$element.removeClass('ag-theme-balham-dark');
-    this.$element.addClass('ag-theme-balham');
-}
+    if (dark) {
+      this.respondToThemeChange(_possibleClasses[themeindex], _possibleClassesDark[themeindex]);
+      return;
+    }
+    this.respondToThemeChange(_possibleClassesDark[themeindex], _possibleClasses[themeindex]);
+  }
+  function baseThemeIndex (dark) {
+    var clss, ind;
+    if (!(this.$element && this.$element.length>0)) {
+      return -1;
+    }
+    clss = (dark ? _possibleClasses : _possibleClassesDark); //the inverse of current class settings
+    for (const cls of this.$element[0].classList.values()) {
+      ind = clss.indexOf(cls);
+      if (ind>=0) {
+        return ind;
+      }
+    }
+    return -1;
+  }
   //endof statics
 }
 module.exports = createThemableMixin;

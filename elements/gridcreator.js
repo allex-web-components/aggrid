@@ -503,7 +503,10 @@ function createGrid (execlib, applib, mylib) {
     return lib.isString(obj.field) || lib.isVal(obj.colId) || lib.isVal(obj.valueGetter);
   }
 
-
+  AgGridElement.prototype.respondToThemeChange = function (oldtheme, newtheme) {
+    this.$element.removeClass(oldtheme);
+    this.$element.addClass(newtheme);
+  };
 
   applib.registerElementType('AgGrid', AgGridElement);
 
