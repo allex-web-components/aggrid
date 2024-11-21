@@ -42,6 +42,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
     ChangedKeySuffix = '_changed',
     EditableEditedCountPropName = ChangedKeyPrefix+'editableEditedCount';
 
+  var IsBlankRowKeyProperty = 'allexAgGridIsBlankRow';
+
   function trackablesArry (thingy) {
     if (lib.isArray(thingy)) {
       return thingy;
@@ -197,6 +199,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!rec) {
       rec = lib.extendShallow({}, params.data);
       rec[fieldname] = params.oldValue;
+      rec[IsBlankRowKeyProperty] = isBlankRow;
       this.dataOriginals.add(params.rowIndex, rec);
     }
     changed = !isBlankRow && params.data[fieldname]!==rec[fieldname];
@@ -307,6 +310,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
   EditableAgGridMixin.prototype.revertAllEdits = function () {
     var pdata;
     var data;
+    var tmp;
     this.doApi('stopEditing');
     if (this.internalChange) {
       return;
@@ -315,19 +319,30 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (this.dataOriginals) {
       if (lib.isArray(this.get('data'))) {
         data = this.get('data').slice();
-        if (this.dataOriginals.reduce(function(res, val, key) {
-          if (key>res) {
-            return key;
+        tmp = this.dataOriginals.reduce(function(res, val, key) {
+          var a = val[IsBlankRowKeyProperty];
+          if (a) {
+            res.blankRowIndex = key;
+            return res;
+          }
+          if (key>res.maxIndex) {
+            res.maxIndex = key;
           }
           return res;
-        }, -1) > data.length-1) {
+        }, {maxIndex:-1, blankRowIndex:-1});
+        if (tmp.maxIndex > data.length-1) {
           throw new Error('data len mismatch');
         }
         this.dataOriginals.traverse(function (val, recindex) {
+          if (recindex == tmp.blankRowIndex) {
+            this.blankRowController.emptyRow();
+            return;
+          }
           data[recindex] = val;
         });
         this.purgeDataOriginals();
         this.set('data', data);
+        tmp = null;
         data = null;
       }
       this.purgeDataOriginals();

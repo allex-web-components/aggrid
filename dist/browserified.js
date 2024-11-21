@@ -506,9 +506,17 @@ function createChart (execlib, applib, mylib) {
   AgChartElement.prototype.respondToThemeChange = function (oldtheme, newtheme) {
     this.$element.removeClass(oldtheme);
     this.$element.addClass(newtheme);
-    this.chartOpts.theme = newtheme;
+    this.chartOpts.theme = findTheme.call(this,newtheme);
     this.apiUpdate();
   };
+
+  function findTheme(theme){
+    var chartmap = this.getConfigVal('chartmap');
+    if (!chartmap){
+      return theme;
+    }
+    return chartmap[theme] || theme;
+  }
 
   applib.registerElementType('AgChart', AgChartElement);
 }
@@ -995,7 +1003,7 @@ function createGrid (execlib, applib, mylib) {
   }
   */
   AgGridElement.prototype.set_data = function (data) {
-    var edits, checkedits;
+    var edits, checkedits, rowFound;
     if (data == this.data) {
       return false;
     }
@@ -1015,8 +1023,24 @@ function createGrid (execlib, applib, mylib) {
       checkedits = this.doApi('getEditingCells');
       this.lastEditedCellsBeforeSetData = (edits.length != checkedits.length) ? edits : null;
     }
+    //contextmenu
+    //1. indikator da li je ctx menu pokazan ili ne
+    //2. dodati u config.contextmenu "column_id" (session)
+    //3. onda proveriti u odnosu na rowNode.data da li je to taj red
+    //ako ima onda arryopslib.findElementAndIndexWithProperty sa ova 2
+    //
+    if (AgGridElement.checkIfCtxMenuVisible.call(this)){
+      rowFound = this.findRowAndIndexByPropVal(this.config.contextmenu.keyColumn, this.holder.agComponent.rowNode.data[this.config.contextmenu.keyColumn]);
+      if (rowFound?.element){
+        this.holder.agComponent.rowNode.data = rowFound.element;
+        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true});
+      }
+    }
     return true;
   };
+  AgGridElement.checkIfCtxMenuVisible = function(){
+    return !!this.holder && this.holder.isVisible() && this.holder.agComponent && this.config.contextmenu && !!this.config.contextmenu.keyColumn;
+  }
   //static
   function editStarter(cellposition) {
     var indcorr = lib.isNumber(this.addedRowAtIndex) ? this.addedRowAtIndex : Infinity;
@@ -1944,12 +1968,14 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.clicker = this.onClick.bind(this);
     this.chooser = this.itemChooser.bind(this);
     this.items = null;
+    this.agComponent = null;
     this.itemClass = options.item.class || '';
     jQuery('body').append(this.menu);
     jQuery(document).on('click', this.clicker);
   }
   MenuHolder.prototype.destroy = function () {
     this.itemClass = null;
+    this.agComponent = null;
     this.items = null;
     this.chooser = null;
     if (this.clicker) {
@@ -1962,17 +1988,22 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.menu = null;
     this.uid = null;
   };
-  MenuHolder.prototype.addItems = function (items) {
+  MenuHolder.prototype.isVisible = function(){
+    return this.menu?.is(':visible');
+  };
+  MenuHolder.prototype.addItems = function (items, agComponent) {
     if (!this.menu) {
       return;
     }
     this.items = null;
+    this.agComponent = null;
     this.menu.find('li').off('click', this.clicker);
     this.menu.empty();
     if (!lib.isArray(items)) {
       return;
     }
     this.items = items;
+    this.agComponent = agComponent;
     items.forEach(this.addItem.bind(this));
   };
   MenuHolder.prototype.showFromEvent = function (evnt) {
@@ -2063,6 +2094,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   ContextMenuableAgGridMixin.prototype.destroy = function () {
     this.onContextMenuer = null;
     if (this.holder) {
+      this.holder.menu.remove();
       this.holder.destroy();
     }
     this.holder = null;
@@ -2075,7 +2107,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.$element.on('contextmenu', this.onContextMenuer);
   };
   ContextMenuableAgGridMixin.prototype.onContextMenu = function (evnt) {
-    var ctxmenudesc;
+    var ctxmenudesc, agComponent;
     if (!(this.ctxMenuDescriptor || this.globalCtxMenuDescriptor)) {
       return;
     }
@@ -2089,11 +2121,12 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
       return;
     }
     //console.log(evnt.target.__agComponent);
+    agComponent = evnt.target.__agComponent;
     ctxmenudesc = lib.isFunction(this.ctxMenuDescriptor) ? this.ctxMenuDescriptor(evnt.target.__agComponent) : this.ctxMenuDescriptor;
     if (!ctxmenudesc) {
       return;
     }
-    this.holder.addItems(ctxmenudesc);
+    this.holder.addItems(ctxmenudesc, agComponent);
     this.holder.showFromEvent(evnt);
   };
 
@@ -2152,6 +2185,8 @@ function createEditableMixin (execlib, outerlib, mylib) {
   var ChangedKeyPrefix = 'allexAgGrid_',
     ChangedKeySuffix = '_changed',
     EditableEditedCountPropName = ChangedKeyPrefix+'editableEditedCount';
+
+  var IsBlankRowKeyProperty = 'allexAgGridIsBlankRow';
 
   function trackablesArry (thingy) {
     if (lib.isArray(thingy)) {
@@ -2308,6 +2343,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (!rec) {
       rec = lib.extendShallow({}, params.data);
       rec[fieldname] = params.oldValue;
+      rec[IsBlankRowKeyProperty] = isBlankRow;
       this.dataOriginals.add(params.rowIndex, rec);
     }
     changed = !isBlankRow && params.data[fieldname]!==rec[fieldname];
@@ -2418,6 +2454,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
   EditableAgGridMixin.prototype.revertAllEdits = function () {
     var pdata;
     var data;
+    var tmp;
     this.doApi('stopEditing');
     if (this.internalChange) {
       return;
@@ -2426,19 +2463,30 @@ function createEditableMixin (execlib, outerlib, mylib) {
     if (this.dataOriginals) {
       if (lib.isArray(this.get('data'))) {
         data = this.get('data').slice();
-        if (this.dataOriginals.reduce(function(res, val, key) {
-          if (key>res) {
-            return key;
+        tmp = this.dataOriginals.reduce(function(res, val, key) {
+          var a = val[IsBlankRowKeyProperty];
+          if (a) {
+            res.blankRowIndex = key;
+            return res;
+          }
+          if (key>res.maxIndex) {
+            res.maxIndex = key;
           }
           return res;
-        }, -1) > data.length-1) {
+        }, {maxIndex:-1, blankRowIndex:-1});
+        if (tmp.maxIndex > data.length-1) {
           throw new Error('data len mismatch');
         }
         this.dataOriginals.traverse(function (val, recindex) {
+          if (recindex == tmp.blankRowIndex) {
+            this.blankRowController.emptyRow();
+            return;
+          }
           data[recindex] = val;
         });
         this.purgeDataOriginals();
         this.set('data', data);
+        tmp = null;
         data = null;
       }
       this.purgeDataOriginals();

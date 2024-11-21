@@ -16,12 +16,14 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.clicker = this.onClick.bind(this);
     this.chooser = this.itemChooser.bind(this);
     this.items = null;
+    this.agComponent = null;
     this.itemClass = options.item.class || '';
     jQuery('body').append(this.menu);
     jQuery(document).on('click', this.clicker);
   }
   MenuHolder.prototype.destroy = function () {
     this.itemClass = null;
+    this.agComponent = null;
     this.items = null;
     this.chooser = null;
     if (this.clicker) {
@@ -34,17 +36,22 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.menu = null;
     this.uid = null;
   };
-  MenuHolder.prototype.addItems = function (items) {
+  MenuHolder.prototype.isVisible = function(){
+    return this.menu?.is(':visible');
+  };
+  MenuHolder.prototype.addItems = function (items, agComponent) {
     if (!this.menu) {
       return;
     }
     this.items = null;
+    this.agComponent = null;
     this.menu.find('li').off('click', this.clicker);
     this.menu.empty();
     if (!lib.isArray(items)) {
       return;
     }
     this.items = items;
+    this.agComponent = agComponent;
     items.forEach(this.addItem.bind(this));
   };
   MenuHolder.prototype.showFromEvent = function (evnt) {
@@ -135,6 +142,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
   ContextMenuableAgGridMixin.prototype.destroy = function () {
     this.onContextMenuer = null;
     if (this.holder) {
+      this.holder.menu.remove();
       this.holder.destroy();
     }
     this.holder = null;
@@ -147,7 +155,7 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     this.$element.on('contextmenu', this.onContextMenuer);
   };
   ContextMenuableAgGridMixin.prototype.onContextMenu = function (evnt) {
-    var ctxmenudesc;
+    var ctxmenudesc, agComponent;
     if (!(this.ctxMenuDescriptor || this.globalCtxMenuDescriptor)) {
       return;
     }
@@ -161,11 +169,12 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
       return;
     }
     //console.log(evnt.target.__agComponent);
+    agComponent = evnt.target.__agComponent;
     ctxmenudesc = lib.isFunction(this.ctxMenuDescriptor) ? this.ctxMenuDescriptor(evnt.target.__agComponent) : this.ctxMenuDescriptor;
     if (!ctxmenudesc) {
       return;
     }
-    this.holder.addItems(ctxmenudesc);
+    this.holder.addItems(ctxmenudesc, agComponent);
     this.holder.showFromEvent(evnt);
   };
 

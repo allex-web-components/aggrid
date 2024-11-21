@@ -123,7 +123,7 @@ function createGrid (execlib, applib, mylib) {
   }
   */
   AgGridElement.prototype.set_data = function (data) {
-    var edits, checkedits;
+    var edits, checkedits, rowFound;
     if (data == this.data) {
       return false;
     }
@@ -143,8 +143,24 @@ function createGrid (execlib, applib, mylib) {
       checkedits = this.doApi('getEditingCells');
       this.lastEditedCellsBeforeSetData = (edits.length != checkedits.length) ? edits : null;
     }
+    //contextmenu
+    //1. indikator da li je ctx menu pokazan ili ne
+    //2. dodati u config.contextmenu "column_id" (session)
+    //3. onda proveriti u odnosu na rowNode.data da li je to taj red
+    //ako ima onda arryopslib.findElementAndIndexWithProperty sa ova 2
+    //
+    if (AgGridElement.checkIfCtxMenuVisible.call(this)){
+      rowFound = this.findRowAndIndexByPropVal(this.config.contextmenu.keyColumn, this.holder.agComponent.rowNode.data[this.config.contextmenu.keyColumn]);
+      if (rowFound?.element){
+        this.holder.agComponent.rowNode.data = rowFound.element;
+        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true});
+      }
+    }
     return true;
   };
+  AgGridElement.checkIfCtxMenuVisible = function(){
+    return !!this.holder && this.holder.isVisible() && this.holder.agComponent && this.config.contextmenu && !!this.config.contextmenu.keyColumn;
+  }
   //static
   function editStarter(cellposition) {
     var indcorr = lib.isNumber(this.addedRowAtIndex) ? this.addedRowAtIndex : Infinity;

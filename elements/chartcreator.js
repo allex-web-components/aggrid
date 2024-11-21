@@ -79,9 +79,17 @@ function createChart (execlib, applib, mylib) {
   AgChartElement.prototype.respondToThemeChange = function (oldtheme, newtheme) {
     this.$element.removeClass(oldtheme);
     this.$element.addClass(newtheme);
-    this.chartOpts.theme = newtheme;
+    this.chartOpts.theme = findTheme.call(this,newtheme);
     this.apiUpdate();
   };
+
+  function findTheme(theme){
+    var chartmap = this.getConfigVal('chartmap');
+    if (!chartmap){
+      return theme;
+    }
+    return chartmap[theme] || theme;
+  }
 
   applib.registerElementType('AgChart', AgChartElement);
 }

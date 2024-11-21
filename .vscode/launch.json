@@ -7,7 +7,7 @@
     {
       "type": "pwa-node",
       "request": "launch",
-      "name": "Component Build",
+      "name": "AGGrid Build",
       "skipFiles": [
         "<node_internals>/**"
       ],
