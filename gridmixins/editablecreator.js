@@ -333,7 +333,7 @@ function createEditableMixin (execlib, outerlib, mylib) {
         if (tmp.maxIndex > data.length-1) {
           throw new Error('data len mismatch');
         }
-        this.dataOriginals.traverse(function (val, recindex) {
+        this.dataOriginals.traverse((val, recindex) => {
           if (recindex == tmp.blankRowIndex) {
             this.blankRowController.emptyRow();
             return;
@@ -934,16 +934,21 @@ function createEditableMixin (execlib, outerlib, mylib) {
     this.dataOriginals.add(index+1, this.dataOriginals.remove(index));
   }
   function nextCellProc (params) {
-    if (!params.nextCellPosition && this.cellEditingStopped) {
-      this.cellEditingStopped = false;
+    if (!params.nextCellPosition) {
+      if (this.cellEditingStopped) {
+        this.cellEditingStopped = false;
+      }
       this.blankRowController.ifEditFinished(null, isEditableRelatedPropertyName, addNewRowFromBlank.bind(this));
+      if (!this.blankRowController.rowNode) {
+        return null;
+      }
       return {
         rowPinned: params.previousCellPosition.rowPinned,
         rowIndex: this.blankRowController.rowNode.rowIndex,
         column: lib.isNonEmptyArray(this.editablepropnames) ? params.columnApi.getColumn(this.editablepropnames[0]) : params.previousCellPosition.column
       };
     }
-    return params.nextCellPosition||params.previousCellPosition;
+    return params.nextCellPosition; //||params.previousCellPosition;
   }
   //endof statics
 
