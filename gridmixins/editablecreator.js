@@ -551,7 +551,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
         rowIndex: index,
         node: rownode,
         data: oldrec4update,
-        api: this.gridApi
+        api: this.gridApi,
+        preventDefault: lib.dummyFunc,
+        stopPropagation: lib.dummyFunc
       });
       /**/
     }

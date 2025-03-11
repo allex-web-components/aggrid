@@ -1033,7 +1033,7 @@ function createGrid (execlib, applib, mylib) {
       rowFound = this.findRowAndIndexByPropVal(this.config.contextmenu.keyColumn, this.holder.agComponent.rowNode.data[this.config.contextmenu.keyColumn]);
       if (rowFound?.element){
         this.holder.agComponent.rowNode.data = rowFound.element;
-        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true});
+        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true, preventDefault: lib.dummyFunc, stopPropagation: lib.dummyFunc});
       }
     }
     return true;
@@ -2007,9 +2007,29 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     items.forEach(this.addItem.bind(this));
   };
   MenuHolder.prototype.showFromEvent = function (evnt) {
+    const mw = this.menu.width();
+    const mh = this.menu.height();
+    const ww = window.innerWidth;
+    const wh = window.innerHeight;
+    const ex = evnt.pageX;
+    const ey = evnt.pageY;
+    let left = ex;
+    let top = ey;
+    if (left+mw>ww) {
+      left = ww-mw;
+    }
+    if (top+mh>wh) {
+      top = wh-mh;
+    }
+    if (left<0) {
+      left = 0;
+    }
+    if (top<0) {
+      top = 0;
+    }
     this.menu.css({
-      left: evnt.pageX+'px',
-      top: evnt.pageY+'px',
+      left: left+'px',
+      top: top+'px',
       'z-index': 5000
     });
     this.menu.show();
@@ -2695,7 +2715,9 @@ function createEditableMixin (execlib, outerlib, mylib) {
         rowIndex: index,
         node: rownode,
         data: oldrec4update,
-        api: this.gridApi
+        api: this.gridApi,
+        preventDefault: lib.dummyFunc,
+        stopPropagation: lib.dummyFunc
       });
       /**/
     }

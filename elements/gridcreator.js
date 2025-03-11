@@ -153,7 +153,7 @@ function createGrid (execlib, applib, mylib) {
       rowFound = this.findRowAndIndexByPropVal(this.config.contextmenu.keyColumn, this.holder.agComponent.rowNode.data[this.config.contextmenu.keyColumn]);
       if (rowFound?.element){
         this.holder.agComponent.rowNode.data = rowFound.element;
-        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true});
+        this.onContextMenu({target: {__agComponent : this.holder.agComponent}, synth: true, preventDefault: lib.dummyFunc, stopPropagation: lib.dummyFunc});
       }
     }
     return true;

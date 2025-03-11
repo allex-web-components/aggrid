@@ -55,9 +55,29 @@ function createContextMenuableMixin (execlib, outerlib, mylib) {
     items.forEach(this.addItem.bind(this));
   };
   MenuHolder.prototype.showFromEvent = function (evnt) {
+    const mw = this.menu.width();
+    const mh = this.menu.height();
+    const ww = window.innerWidth;
+    const wh = window.innerHeight;
+    const ex = evnt.pageX;
+    const ey = evnt.pageY;
+    let left = ex;
+    let top = ey;
+    if (left+mw>ww) {
+      left = ww-mw;
+    }
+    if (top+mh>wh) {
+      top = wh-mh;
+    }
+    if (left<0) {
+      left = 0;
+    }
+    if (top<0) {
+      top = 0;
+    }
     this.menu.css({
-      left: evnt.pageX+'px',
-      top: evnt.pageY+'px',
+      left: left+'px',
+      top: top+'px',
       'z-index': 5000
     });
     this.menu.show();
